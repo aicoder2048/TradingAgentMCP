@@ -5,6 +5,7 @@ from .tools.hello_tool import hello
 from .tools.get_market_time_tool import get_market_time_status
 from .tools.stock_key_info_tool import get_stock_key_info
 from .tools.get_earnings_calendar_tool import get_earnings_calendar_tool
+from .tools.get_stock_history_tool import get_stock_history_tool
 from .prompts.hello_prompt import call_hello_multiple
 from .config.settings import settings
 
@@ -84,6 +85,42 @@ def create_server() -> FastMCP:
             Comprehensive earnings calendar information with events, dates, and metadata
         """
         return await get_earnings_calendar_tool(symbol)
+
+    @mcp.tool()
+    async def stock_history_tool(
+        symbol: str,
+        start_date: str = None,
+        end_date: str = None, 
+        date_range: str = None,
+        interval: str = "daily",
+        include_indicators: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Get comprehensive stock history data with technical indicators and CSV export.
+        
+        Retrieves historical stock price data and performs comprehensive technical analysis.
+        Data is automatically saved to CSV files for further analysis while returning
+        context-optimized summaries and preview records.
+        
+        Args:
+            symbol: Stock ticker symbol (e.g., "AAPL", "TSLA", "NVDA")
+            start_date: Start date in YYYY-MM-DD format (optional)
+            end_date: End date in YYYY-MM-DD format (optional)
+            date_range: Relative range like "30d", "3m", "1y" (optional)
+            interval: Data interval - "daily", "weekly", "monthly" (default: "daily")
+            include_indicators: Calculate technical indicators (default: True)
+            
+        Returns:
+            Dictionary with historical data, technical analysis, CSV path, and summaries
+        """
+        return await get_stock_history_tool(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            date_range=date_range,
+            interval=interval,
+            include_indicators=include_indicators
+        )
 
     @mcp.prompt()
     async def call_hello_multiple_prompt(name: str, times: int = 3) -> str:

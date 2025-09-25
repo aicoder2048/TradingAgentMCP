@@ -107,7 +107,8 @@ python main.py
 │   │       └── client.py    # Tradier API 客户端
 │   ├── stock/               # 股票信息处理
 │   │   ├── __init__.py
-│   │   └── info.py         # 股票信息处理器
+│   │   ├── info.py         # 股票信息处理器  
+│   │   └── history_data.py # 历史数据和技术分析 🆕
 │   ├── utils/               # 通用工具
 │   │   ├── __init__.py
 │   │   └── time.py         # 时间处理工具
@@ -125,18 +126,30 @@ python main.py
 │       │   ├── hello_tool.py # 示例工具实现
 │       │   ├── get_market_time_tool.py # 市场时间工具
 │       │   ├── stock_key_info_tool.py  # 股票信息工具
-│       │   └── get_earnings_calendar_tool.py # 财报日历工具 🆕
+│       │   ├── get_earnings_calendar_tool.py # 财报日历工具 🆕
+│       │   └── get_stock_history_tool.py # 历史数据工具 🆕
 │       └── prompts/
 │           ├── __init__.py
 │           └── hello_prompt.py # 示例提示实现
+├── data/                      # CSV 数据存储目录 🆕
+│   └── .gitkeep               # Git 目录占位文件
 ├── tests/
 │   ├── __init__.py
+│   ├── stock/
+│   │   ├── test_info.py       # 股票信息测试
+│   │   └── test_history_data.py # 历史数据测试 🆕
 │   ├── tools/
-│   │   └── test_hello_tool.py
+│   │   ├── test_hello_tool.py
+│   │   ├── test_get_market_time_tool.py
+│   │   ├── test_stock_info_tool.py 
+│   │   ├── test_get_earnings_calendar_tool.py
+│   │   └── test_get_stock_history_tool.py # 历史数据工具测试 🆕
 │   └── prompts/
 │       └── test_hello_prompt.py
 ├── specs/
-│   └── prd_v0_ai_enhanced.md  # Product requirements document
+│   ├── prd_v0_ai_enhanced.md  # Product requirements document
+│   ├── prd_v3_ai_enhanced.md  # 财报日历 PRD 🆕
+│   └── prd_v4_ai_enhanced.md  # 历史数据 PRD 🆕
 └── ai_docs/                    # Reference documentation
 ```
 
@@ -237,6 +250,21 @@ uv run pytest tests/tools/test_hello_tool.py
   - 返回: 包含历史和未来财报事件、下次财报日期的综合日历信息
   - 特色: 智能过滤（仅显示12个月内的财报相关事件）
 
+- **stock_history_tool**: 获取股票历史数据和技术分析 🆕
+  - 输入: 
+    - `symbol` (必需: 股票代码，如 "AAPL", "TSLA", "NVDA")
+    - `start_date` (可选: 开始日期 YYYY-MM-DD)
+    - `end_date` (可选: 结束日期 YYYY-MM-DD) 
+    - `date_range` (可选: 相对范围如 "30d", "3m", "1y")
+    - `interval` (可选: "daily", "weekly", "monthly", 默认 "daily")
+    - `include_indicators` (可选: 是否包含技术指标, 默认 true)
+  - 返回: 历史 OHLCV 数据、技术指标、CSV 文件路径、统计摘要
+  - 特色: 
+    - 支持灵活日期范围 (绝对/相对/混合模式)
+    - 全套技术指标 (SMA, EMA, RSI, MACD, ATR, 布林带等)
+    - 自动保存 CSV 文件到 `./data` 目录
+    - 上下文优化 (仅返回摘要 + 前30条记录)
+
 - **hello**: 简单的问候工具（演示用）
   - 输入: `name` (字符串)
   - 返回: 结构化的问候响应
@@ -266,8 +294,13 @@ uv run pytest tests/tools/test_hello_tool.py
 # 查看财报日历
 使用 earnings_calendar_tool 获取 AAPL 的财报日历和下次财报日期
 
-# 分析多个股票
-同时获取 AAPL、NVDA、MSFT 的股票数据和财报时间进行投资分析
+# 获取股票历史数据和技术分析 🆕
+使用 stock_history_tool 获取 TSLA 过去3个月的日线数据和技术指标
+使用 stock_history_tool 获取 AAPL 指定日期范围的数据 (start_date="2023-01-01", end_date="2023-12-31")
+使用 stock_history_tool 获取 NVDA 过去1年的周线数据 (date_range="1y", interval="weekly")
+
+# 分析多个股票  
+同时获取 AAPL、NVDA、MSFT 的股票数据、财报时间和历史趋势进行投资分析
 ```
 
 ## 🚦 Development Workflow
