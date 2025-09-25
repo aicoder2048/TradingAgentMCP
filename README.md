@@ -1,71 +1,83 @@
-# MCP Server Template
+# TradingAgent MCP
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![FastMCP](https://img.shields.io/badge/FastMCP-2.0+-green.svg)](https://github.com/fastmcp/fastmcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready Model Context Protocol (MCP) server template built with FastMCP framework. This template provides a solid foundation for building MCP servers that integrate seamlessly with Claude Code and other MCP clients.
+一个生产就绪的交易代理 MCP 服务器，基于 FastMCP 框架构建。提供股票市场数据、交易时段状态和综合股票信息的实时访问功能，与 Claude Code 和其他 MCP 客户端无缝集成。
 
-## 🌟 Features
+## 🌟 核心功能
 
-- **🚀 Quick Start**: Ready-to-use MCP server structure with minimal setup
-- **🔧 Configurable**: Environment-based configuration for easy customization
-- **🧩 Modular Architecture**: Clean separation of tools, prompts, and configurations
-- **🧪 Test Ready**: Built-in testing framework with pytest
-- **📝 Type Safe**: Full type hints and Pydantic models support
-- **🔌 Claude Code Optimized**: Pre-configured for Claude Code integration
-- **📦 UV Package Manager**: Modern Python package management with UV
+- **📊 实时市场数据**: 通过 Tradier API 提供实时股票信息和市场时间
+- **🕐 交易时段跟踪**: 准确获取美股市场开盘状态和交易时段信息
+- **📈 综合股票分析**: 详细的股票关键信息，包括价格、成交量、估值指标和技术指标
+- **🔧 环境配置**: 基于环境变量的灵活配置，支持沙盒和生产环境
+- **🧩 模块化架构**: 工具、提示和配置的清晰分离
+- **🧪 测试就绪**: 内置 pytest 测试框架
+- **📝 类型安全**: 完整的类型提示和 Pydantic 模型支持
+- **🔌 Claude Code 优化**: 为 Claude Code 集成预配置
+- **📦 UV 包管理**: 使用 UV 进行现代 Python 包管理
 
-## 📋 Prerequisites
+## 📋 系统要求
 
-- Python 3.13 or higher
-- [UV package manager](https://github.com/astral-sh/uv)
-- Claude Code (for MCP client integration)
+- Python 3.13 或更高版本
+- [UV 包管理器](https://github.com/astral-sh/uv)
+- Claude Code（用于 MCP 客户端集成）
+- [Tradier 开发者账户](https://developer.tradier.com/)（用于市场数据 API 访问）
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-### 1. Clone the Repository
+### 1. 克隆仓库
 
 ```bash
 git clone <repository-url>
-cd <project-directory>
+cd TradingAgentMCP
 ```
 
-### 2. Setup Environment
+### 2. 环境配置
 
 ```bash
-# Copy environment configuration
+# 复制环境配置文件
 cp .env.sample .env
 
-# Edit .env file with your settings
-# Customize MCP_SERVER_NAME and other variables
+# 编辑 .env 文件，设置你的配置
+# 需要设置 TRADIER_ACCESS_TOKEN 和其他变量
 ```
 
-### 3. Install Dependencies
+**重要**: 在 `.env` 文件中配置你的 Tradier API 访问令牌：
+
+```env
+# 从 https://developer.tradier.com/ 获取你的令牌
+TRADIER_ACCESS_TOKEN=your-tradier-access-token-here
+TRADIER_ENVIRONMENT=sandbox  # 或 'production' 用于实盘
+MCP_SERVER_NAME=TradingAgentMCP
+```
+
+### 3. 安装依赖
 
 ```bash
-# Create virtual environment and install dependencies
+# 创建虚拟环境并安装依赖
 uv sync --python 3.13
 ```
 
-### 4. Configure Claude Code Integration
+### 4. 配置 Claude Code 集成
 
 ```bash
-# Copy MCP configuration
+# 复制 MCP 配置文件
 cp .mcp.json.sample .mcp.json
 
-# Edit .mcp.json with your paths
-# Update server name and project path
+# 编辑 .mcp.json，更新项目路径
+# 更新服务器名称和项目路径
 ```
 
-### 5. Run the Server
+### 5. 运行服务器
 
 ```bash
-# Run directly with UV
+# 使用 UV 直接运行
 uv run python main.py
 
-# Or activate environment first
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# 或先激活环境
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 python main.py
 ```
 
@@ -81,21 +93,42 @@ python main.py
 ├── pyproject.toml            # Project dependencies and metadata
 ├── uv.lock                   # Locked dependencies
 ├── src/
-│   └── mcp_server/
+│   ├── market/               # 市场数据处理模块
+│   │   ├── __init__.py
+│   │   ├── config.py        # 市场配置
+│   │   ├── earnings_calendar.py # 财报日历功能 🆕
+│   │   ├── holidays.py      # 市场假期处理
+│   │   ├── hours.py         # 交易时段管理
+│   │   └── data/
+│   │       └── mkt_holidays_2025_2026.json # 市场假期数据
+│   ├── provider/            # 数据提供商集成
+│   │   └── tradier/
+│   │       ├── __init__.py
+│   │       └── client.py    # Tradier API 客户端
+│   ├── stock/               # 股票信息处理
+│   │   ├── __init__.py
+│   │   └── info.py         # 股票信息处理器
+│   ├── utils/               # 通用工具
+│   │   ├── __init__.py
+│   │   └── time.py         # 时间处理工具
+│   └── mcp_server/          # MCP 服务器核心
 │       ├── __init__.py
-│       ├── server.py         # Main server implementation
+│       ├── server.py        # 主服务器实现
 │       ├── config/
 │       │   ├── __init__.py
-│       │   └── settings.py   # Configuration management
+│       │   └── settings.py  # 配置管理
 │       ├── models/
 │       │   ├── __init__.py
-│       │   └── schemas.py    # Pydantic data models
-│       ├── tools/
+│       │   └── schemas.py   # Pydantic 数据模型
+│       ├── tools/           # MCP 工具实现
 │       │   ├── __init__.py
-│       │   └── hello_tool.py # Example tool implementation
+│       │   ├── hello_tool.py # 示例工具实现
+│       │   ├── get_market_time_tool.py # 市场时间工具
+│       │   ├── stock_key_info_tool.py  # 股票信息工具
+│       │   └── get_earnings_calendar_tool.py # 财报日历工具 🆕
 │       └── prompts/
 │           ├── __init__.py
-│           └── hello_prompt.py # Example prompt implementation
+│           └── hello_prompt.py # 示例提示实现
 ├── tests/
 │   ├── __init__.py
 │   ├── tools/
@@ -109,100 +142,133 @@ python main.py
 
 ## ⚙️ Configuration
 
-### Environment Variables
+### 环境变量
 
-Configure your server by setting environment variables in `.env`:
+在 `.env` 文件中配置服务器环境变量：
 
 ```env
-# Server Configuration
-MCP_SERVER_NAME=YourServerName   # Your MCP server name
-MCP_VERSION=1.0.0                # Server version
+# 服务器配置
+MCP_SERVER_NAME=TradingAgentMCP  # MCP 服务器名称
+MCP_VERSION=1.0.0                # 服务器版本
 
-# Logging
+# Tradier API 配置
+TRADIER_ACCESS_TOKEN=your-token-here  # Tradier API 访问令牌
+TRADIER_ENVIRONMENT=sandbox           # sandbox 或 production
+
+# 日志配置
 LOG_LEVEL=INFO                   # DEBUG, INFO, WARNING, ERROR, CRITICAL
-DEBUG=false                      # Enable debug mode
+DEBUG=false                      # 启用调试模式
 
-# Features
-MAX_PROMPT_CALLS=10             # Maximum prompt iterations
-ENABLE_METRICS=false            # Enable metrics collection
+# 功能配置
+MAX_PROMPT_CALLS=10             # 最大提示调用次数
+ENABLE_METRICS=false            # 启用指标收集
 ```
 
-### Claude Code Integration
+### Claude Code 集成
 
-Configure Claude Code to connect to your server in `.mcp.json`:
+在 `.mcp.json` 中配置 Claude Code 连接到你的服务器：
 
 ```json
 {
   "mcpServers": {
-    "YourServerName": {
+    "TradingAgentMCP": {
       "command": "uv",
-      "args": ["run", "python", "/path/to/project/main.py"],
+      "args": ["run", "python", "/path/to/TradingAgentMCP/main.py"],
       "env": {
         "LOG_LEVEL": "DEBUG",
-        "PYTHONPATH": "/path/to/project"
+        "PYTHONPATH": "/path/to/TradingAgentMCP"
       }
     }
   }
 }
 ```
 
-## 🛠️ Development
+## 🛠️ 开发指南
 
-### Adding New Tools
+### 添加新工具
 
-1. Create a new file in `src/mcp_server/tools/`
-2. Implement your async tool function
-3. Export it in `tools/__init__.py`
-4. Register in `server.py` with `@mcp.tool()` decorator
+1. 在 `src/mcp_server/tools/` 中创建新文件
+2. 实现异步工具函数
+3. 在 `tools/__init__.py` 中导出
+4. 在 `server.py` 中使用 `@mcp.tool()` 装饰器注册
 
-Example:
+示例:
 ```python
-# src/mcp_server/tools/my_tool.py
-async def my_tool(param: str) -> dict:
-    """Your tool description."""
-    return {"result": f"Processed: {param}"}
+# src/mcp_server/tools/my_trading_tool.py
+async def my_trading_tool(symbol: str) -> dict:
+    """你的工具描述。"""
+    return {"result": f"处理股票: {symbol}"}
 ```
 
-### Adding New Prompts
+### 添加新提示
 
-1. Create a new file in `src/mcp_server/prompts/`
-2. Implement your async prompt function
-3. Export it in `prompts/__init__.py`
-4. Register in `server.py` with `@mcp.prompt()` decorator
+1. 在 `src/mcp_server/prompts/` 中创建新文件
+2. 实现异步提示函数
+3. 在 `prompts/__init__.py` 中导出
+4. 在 `server.py` 中使用 `@mcp.prompt()` 装饰器注册
 
-### Running Tests
+### 运行测试
 
 ```bash
-# Run all tests
+# 运行所有测试
 uv run pytest
 
-# Run with coverage
+# 运行覆盖率测试
 uv run pytest --cov=src/mcp_server
 
-# Run specific test file
+# 运行特定测试文件
 uv run pytest tests/tools/test_hello_tool.py
 ```
 
-## 🔍 Available Tools and Prompts
+## 🔍 可用工具和提示
 
-### Tools
+### 交易工具
 
-- **hello**: A simple greeting tool that demonstrates basic tool structure
-  - Input: `name` (string)
-  - Output: Structured response with greeting message
+- **get_market_time_tool**: 获取美股市场时间和交易状态
+  - 无需输入参数
+  - 返回: 包含东部时间、市场状态、交易日信息的综合数据
 
-### Prompts
+- **stock_info_tool**: 获取股票综合关键信息
+  - 输入: `symbol` (股票代码，如 "TSLA", "AAPL", "NVDA")
+  - 返回: 详细的股票信息，包括价格数据、交易量、估值指标和技术指标
 
-- **call_hello_multiple**: Demonstrates prompt functionality
-  - Generates instructions to call the hello tool multiple times
-  - Parameters: `name` (string), `times` (integer)
+- **earnings_calendar_tool**: 获取股票财报日历信息 🆕
+  - 输入: `symbol` (股票代码，如 "TSLA", "AAPL", "NVDA")
+  - 返回: 包含历史和未来财报事件、下次财报日期的综合日历信息
+  - 特色: 智能过滤（仅显示12个月内的财报相关事件）
 
-## 🎯 Usage with Claude Code
+- **hello**: 简单的问候工具（演示用）
+  - 输入: `name` (字符串)
+  - 返回: 结构化的问候响应
 
-1. **Start the server**: The server will run as configured in `.mcp.json`
-2. **Check connection**: Use `/mcp` command in Claude Code to verify
-3. **Use tools**: Call tools directly through Claude Code
-4. **Use prompts**: Access prompts for guided interactions
+### 提示
+
+- **call_hello_multiple**: 演示提示功能
+  - 生成多次调用 hello 工具的指令
+  - 参数: `name` (字符串), `times` (整数)
+
+## 🎯 与 Claude Code 配合使用
+
+1. **启动服务器**: 服务器将根据 `.mcp.json` 中的配置运行
+2. **检查连接**: 在 Claude Code 中使用 `/mcp` 命令验证连接
+3. **使用工具**: 通过 Claude Code 直接调用交易工具
+4. **使用提示**: 访问提示进行引导式交互
+
+### 示例用法
+
+```
+# 获取市场状态
+使用 get_market_time_tool 获取当前美股市场状态
+
+# 查看股票信息  
+使用 stock_info_tool 查看 TSLA 的详细信息
+
+# 查看财报日历
+使用 earnings_calendar_tool 获取 AAPL 的财报日历和下次财报日期
+
+# 分析多个股票
+同时获取 AAPL、NVDA、MSFT 的股票数据和财报时间进行投资分析
+```
 
 ## 🚦 Development Workflow
 
@@ -223,66 +289,62 @@ uv run pytest tests/tools/test_hello_tool.py
    - Update this README with new features
    - Document tool and prompt signatures
 
-## 📈 Template Extension Guide
+## 📈 交易功能扩展
 
-This template currently includes only a basic "hello" tool and prompt as examples, designed to be extended for any domain-specific MCP server project.
+TradingAgent MCP 提供了一个强大的框架，可以轻松扩展更多交易相关功能。
 
-### Product Requirements Documents (PRDs)
+### 当前功能
 
-The `specs/` directory contains project PRDs for iterative development:
+- **实时市场数据**: 通过 Tradier API 获取实时股票信息
+- **市场时间跟踪**: 准确的美股交易时段状态
+- **股票综合分析**: 价格、成交量、估值和技术指标
 
-- **Human Version**: `prd_v0.md` - Initial human-written requirements
-- **AI-Enhanced Version**: `prd_v0_ai_enhanced.md` - AI-enhanced requirements with detailed specifications
+### 可扩展功能
 
-#### Version Management
-- Progress through versions: v1, v2, v3, etc.
-- Each version represents:
-  - New feature additions
-  - Major architectural changes
-  - Critical bug fixes
-- Maintain both human (`prd_vX.md`) and AI-enhanced (`prd_vX_ai_enhanced.md`) versions
+1. **期权数据**: 期权链、隐含波动率、希腊字母
+2. **技术分析**: 更多技术指标、图表模式识别
+3. **基本面分析**: 财务报表、估值模型
+4. **组合管理**: 投资组合跟踪、风险分析
+5. **交易执行**: 下单、订单管理（需要相应授权）
 
-#### AI Enhancement Process
-- Use Claude Code slash command `/quick-plan` to generate AI-enhanced PRDs
-- This command is defined in `.claude/commands/quick-plan.md`
-- Automatically creates comprehensive technical specifications from human requirements
+### 产品需求文档 (PRDs)
 
-### Claude Code Commands
+`specs/` 目录包含项目的迭代开发 PRD：
 
-Located in `.claude/commands/`:
+- **人工版本**: `prd_v0.md` - 初始人工编写的需求
+- **AI 增强版本**: `prd_v0_ai_enhanced.md` - AI 增强的详细规格
 
-#### Context Priming Commands
-- **`prime.md`**: General context priming for Claude
-- **`prime_cc.md`**: Claude Code-specific context priming
-- Use these at the beginning of sessions to establish project context
+#### 版本管理
+- 逐步推进版本：v1、v2、v3 等
+- 每个版本代表：
+  - 新功能添加
+  - 主要架构变更  
+  - 关键错误修复
 
-#### Planning Command
-- **`quick-plan.md`**: Converts human PRDs into detailed technical specifications
-- Automatically generates implementation plans with code examples
+### Claude Code 命令
 
-### Output Styles
+位于 `.claude/commands/`：
 
-Located in `.claude/output-styles/`:
+#### 上下文启动命令
+- **`prime.md`**: Claude 的通用上下文启动
+- **`prime_cc.md`**: Claude Code 专用上下文启动
 
-- **`genui.md`**: General-purpose HTML output style
-  - Generates complete, self-contained HTML documents
-  - Includes modern embedded CSS styling
-  - Automatically opens in browser
-  - Useful for creating reports, documentation, or visual outputs
+#### 规划命令
+- **`quick-plan.md`**: 将人工 PRD 转换为详细技术规格
 
-### Extending the Template
+### 扩展指南
 
-1. **Start with PRD**: Write your requirements in `specs/prd_v1.md`
-2. **Generate AI-Enhanced Version**: Use `/quick-plan` to create detailed specifications
-3. **Implement Features**: Add tools and prompts following the established patterns
-4. **Document Progress**: Update PRDs for each major version
-5. **Utilize Claude Commands**: Use context priming and planning commands for efficiency
+1. **从 PRD 开始**: 在 `specs/prd_v1.md` 中编写需求
+2. **生成 AI 增强版本**: 使用 `/quick-plan` 创建详细规格
+3. **实现功能**: 按照既定模式添加工具和提示
+4. **记录进度**: 为每个主要版本更新 PRD
 
-## 📚 Documentation
+## 📚 相关文档
 
-- [FastMCP Documentation](https://github.com/fastmcp/fastmcp)
-- [MCP Protocol Specification](https://modelcontextprotocol.io)
-- [Claude Code MCP Guide](https://docs.anthropic.com/claude/docs/mcp)
+- [FastMCP 文档](https://github.com/fastmcp/fastmcp)
+- [MCP 协议规范](https://modelcontextprotocol.io)
+- [Claude Code MCP 指南](https://docs.anthropic.com/claude/docs/mcp)
+- [Tradier 开发者文档](https://developer.tradier.com/)
 
 ## 🤝 Contributing
 
@@ -296,16 +358,17 @@ Located in `.claude/output-styles/`:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## 🙏 致谢
 
-- Built with [FastMCP](https://github.com/fastmcp/fastmcp) framework
-- Designed for [Claude Code](https://claude.ai) integration
-- Package management by [UV](https://github.com/astral-sh/uv)
+- 基于 [FastMCP](https://github.com/fastmcp/fastmcp) 框架构建
+- 为 [Claude Code](https://claude.ai) 集成而设计
+- 使用 [UV](https://github.com/astral-sh/uv) 进行包管理
+- 市场数据由 [Tradier](https://tradier.com) 提供
 
-## 📮 Support
+## 📮 支持
 
-For issues, questions, or suggestions, please open an issue on GitHub.
+如有问题、疑问或建议，请在 GitHub 上提交 issue。
 
 ---
 
-*This is a template project. Customize it for your specific MCP server needs.*
+*TradingAgent MCP - 为交易分析和市场数据访问而构建的专业 MCP 服务器。*
