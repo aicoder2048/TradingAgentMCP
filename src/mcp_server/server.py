@@ -4,6 +4,7 @@ from typing import Dict, Any
 from .tools.hello_tool import hello
 from .tools.get_market_time_tool import get_market_time_status
 from .tools.stock_key_info_tool import get_stock_key_info
+from .tools.get_earnings_calendar_tool import get_earnings_calendar_tool
 from .prompts.hello_prompt import call_hello_multiple
 from .config.settings import settings
 
@@ -65,6 +66,24 @@ def create_server() -> FastMCP:
             Comprehensive stock information with formatted display and raw data
         """
         return await get_stock_key_info(symbol)
+
+    @mcp.tool()
+    async def earnings_calendar_tool(symbol: str) -> Dict[str, Any]:
+        """
+        Get comprehensive earnings calendar information for a stock symbol.
+        
+        Retrieves detailed earnings calendar data including upcoming and historical
+        earnings events, announcement dates, and corporate calendar information
+        using real-time Tradier API data. Essential for trading decisions and
+        event-driven investment strategies.
+        
+        Args:
+            symbol: Stock ticker symbol (e.g., "TSLA", "AAPL", "NVDA")
+            
+        Returns:
+            Comprehensive earnings calendar information with events, dates, and metadata
+        """
+        return await get_earnings_calendar_tool(symbol)
 
     @mcp.prompt()
     async def call_hello_multiple_prompt(name: str, times: int = 3) -> str:
