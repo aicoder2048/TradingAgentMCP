@@ -18,3 +18,16 @@ def get_timezone_time(timezone: str = "UTC") -> datetime:
         ZoneInfoNotFoundError: If timezone is invalid
     """
     return datetime.now(ZoneInfo(timezone))
+
+
+def get_market_time_et() -> datetime:
+    """
+    Get current US market time in Eastern Time.
+    
+    US financial markets operate in Eastern Time (ET), which is 
+    US/Eastern timezone (automatically handles EST/EDT transitions).
+    
+    Returns:
+        Current datetime in US Eastern Time
+    """
+    return get_timezone_time("US/Eastern")

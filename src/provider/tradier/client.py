@@ -57,6 +57,7 @@ class TradierQuote:
     option_type: Optional[str] = None     # Option type (call/put)
     open_interest: Optional[int] = None   # Open interest (for options)
     root_symbols: Optional[str] = None    # Root symbols
+    contract_size: Optional[int] = None   # Contract size (for options)
     greeks: Optional[Dict[str, float]] = None  # Greeks data (for options)
 
 
@@ -69,6 +70,60 @@ class TradierHistoricalData:
     low: float
     close: float
     volume: int
+
+
+@dataclass
+class OptionContract:
+    """期权合约数据结构。"""
+    symbol: str
+    strike: float
+    expiration_date: str
+    option_type: str  # "call" or "put"
+    bid: Optional[float] = None
+    ask: Optional[float] = None
+    last: Optional[float] = None
+    volume: Optional[int] = None
+    open_interest: Optional[int] = None
+    underlying: Optional[str] = None
+    change: Optional[float] = None
+    change_percentage: Optional[float] = None
+    greeks: Optional[Dict[str, float]] = None
+    
+    # 新增重要字段
+    description: Optional[str] = None  # 期权描述 "AAPL Apr 16 2021 $125.00 Call"
+    open: Optional[float] = None       # 开盘价
+    high: Optional[float] = None       # 最高价  
+    low: Optional[float] = None        # 最低价
+    close: Optional[float] = None      # 收盘价
+    prevclose: Optional[float] = None  # 前收盘价
+    average_volume: Optional[int] = None     # 平均成交量
+    last_volume: Optional[int] = None        # 最新成交量
+    week_52_high: Optional[float] = None     # 52周最高价
+    week_52_low: Optional[float] = None      # 52周最低价
+    bidsize: Optional[int] = None            # 买盘量
+    asksize: Optional[int] = None            # 卖盘量
+    trade_date: Optional[int] = None         # 交易时间戳
+    bid_date: Optional[int] = None           # 买价时间戳
+    ask_date: Optional[int] = None           # 卖价时间戳
+    contract_size: Optional[int] = None      # 合约规模 (通常是100)
+    root_symbol: Optional[str] = None        # 根符号
+    
+    # 计算字段
+    mid_price: Optional[float] = None
+    intrinsic_value: Optional[float] = None
+    time_value: Optional[float] = None
+    moneyness: Optional[float] = None
+    days_to_expiration: Optional[int] = None
+    in_the_money: Optional[bool] = None
+
+
+@dataclass
+class OptionExpiration:
+    """期权到期日数据结构。"""
+    date: str
+    contract_size: int
+    expiration_type: str
+    strikes: List[float]
 
 
 class TradierClient:
@@ -369,32 +424,72 @@ class TradierClient:
 
         return options
 
-    def get_option_expirations(self, symbol: str, include_all_roots: bool = True) -> List[str]:
-        """Get option expiration dates for a symbol.
+    def get_option_expirations(self, symbol: str, include_all_roots: bool = True, 
+                                include_strikes: bool = False, include_details: bool = False) -> List[OptionExpiration]:
+        """获取期权到期日信息。
 
         Args:
-            symbol: Stock symbol
-            include_all_roots: Include all option roots
+            symbol: 股票代码
+            include_all_roots: 包含所有期权根符号
+            include_strikes: 包含执行价格信息
+            include_details: 包含详细信息（合约大小、到期类型等）
 
         Returns:
-            List of expiration date strings
+            OptionExpiration 对象列表
         """
         params = {
             "symbol": symbol,
             "includeAllRoots": "true" if include_all_roots else "false"
         }
+        
+        if include_strikes:
+            params["strikes"] = "true"
+        if include_details:
+            params["contractSize"] = "true"
+            params["expirationType"] = "true"
 
         data = self._make_request_with_retry("GET", "/v1/markets/options/expirations", params)
         expirations_data = data.get("expirations", {})
 
-        if "date" not in expirations_data:
-            return []
-
-        date_list = expirations_data["date"]
-        if not isinstance(date_list, list):
-            date_list = [date_list]
-
-        return date_list
+        if "expiration" in expirations_data:
+            # 详细格式响应
+            exp_list = expirations_data["expiration"]
+            if not isinstance(exp_list, list):
+                exp_list = [exp_list]
+            
+            expirations = []
+            for exp_data in exp_list:
+                strikes = []
+                if "strikes" in exp_data and "strike" in exp_data["strikes"]:
+                    strikes_data = exp_data["strikes"]["strike"]
+                    if isinstance(strikes_data, list):
+                        strikes = strikes_data
+                    else:
+                        strikes = [strikes_data]
+                
+                expiration = OptionExpiration(
+                    date=exp_data.get("date", ""),
+                    contract_size=exp_data.get("contract_size", 100),
+                    expiration_type=exp_data.get("expiration_type", "standard"),
+                    strikes=strikes
+                )
+                expirations.append(expiration)
+            return expirations
+        
+        elif "date" in expirations_data:
+            # 简单格式响应
+            date_list = expirations_data["date"]
+            if not isinstance(date_list, list):
+                date_list = [date_list]
+            
+            return [OptionExpiration(
+                date=date,
+                contract_size=100,
+                expiration_type="standard", 
+                strikes=[]
+            ) for date in date_list]
+        
+        return []
 
     def get_historical_data(
         self, symbol: str, start_date: str, end_date: str, interval: str = "daily"
@@ -468,3 +563,92 @@ class TradierClient:
             security_list = [security_list]
 
         return security_list
+
+    def get_option_strikes(self, symbol: str, expiration: str, include_all_roots: bool = True) -> List[float]:
+        """获取指定到期日的期权执行价格。
+
+        Args:
+            symbol: 股票代码
+            expiration: 到期日 (YYYY-MM-DD 格式)
+            include_all_roots: 包含所有期权根符号
+
+        Returns:
+            执行价格列表
+        """
+        params = {
+            "symbol": symbol,
+            "expiration": expiration,
+            "includeAllRoots": "true" if include_all_roots else "false"
+        }
+
+        data = self._make_request_with_retry("GET", "/v1/markets/options/strikes", params)
+        strikes_data = data.get("strikes", {})
+
+        if "strike" not in strikes_data:
+            return []
+
+        strike_list = strikes_data["strike"]
+        if not isinstance(strike_list, list):
+            strike_list = [strike_list]
+
+        return [float(strike) for strike in strike_list]
+    
+    def get_option_chain_enhanced(self, symbol: str, expiration: str, 
+                                include_greeks: bool = True) -> List[OptionContract]:
+        """获取增强的期权链数据，返回 OptionContract 对象。
+
+        Args:
+            symbol: 股票代码
+            expiration: 到期日 (YYYY-MM-DD 格式) 
+            include_greeks: 是否包含希腊字母
+
+        Returns:
+            OptionContract 对象列表
+        """
+        # 使用现有的 get_option_chain 方法获取数据
+        tradier_quotes = self.get_option_chain(symbol, expiration, include_greeks)
+        
+        option_contracts = []
+        for quote in tradier_quotes:
+            # 计算中间价格
+            mid_price = None
+            if quote.bid is not None and quote.ask is not None and quote.bid > 0 and quote.ask > 0:
+                mid_price = (quote.bid + quote.ask) / 2
+            
+            contract = OptionContract(
+                symbol=quote.symbol,
+                strike=quote.strike,
+                expiration_date=quote.expiration_date,
+                option_type=quote.option_type,
+                bid=quote.bid,
+                ask=quote.ask,
+                last=quote.last,
+                volume=quote.volume,
+                open_interest=quote.open_interest,
+                underlying=quote.underlying,
+                change=quote.change,
+                change_percentage=quote.change_percentage,
+                greeks=quote.greeks,
+                mid_price=mid_price,
+                # 新增的重要字段
+                description=quote.description,
+                open=quote.open,
+                high=quote.high,
+                low=quote.low,
+                close=quote.close,
+                prevclose=quote.prevclose,
+                average_volume=quote.average_volume,
+                last_volume=quote.last_volume,
+                week_52_high=quote.week_52_high,
+                week_52_low=quote.week_52_low,
+                bidsize=quote.bidsize,
+                asksize=quote.asksize,
+                trade_date=quote.trade_date,
+                bid_date=quote.bid_date,
+                ask_date=quote.ask_date,
+                contract_size=quote.contract_size,
+                root_symbol=quote.root_symbols
+            )
+            option_contracts.append(contract)
+        
+        return option_contracts
