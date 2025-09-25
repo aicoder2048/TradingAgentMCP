@@ -234,19 +234,33 @@ class StockInfoProcessor:
         premarket_change_percentage = None
         premarket_time = None
         
-        # In pre-market or after-hours, current price is the extended hours price
-        # But also populate if we have different last vs prevclose (indicates movement)
-        if quote.last and quote.prevclose and quote.last != quote.prevclose:
-            if market_status in ["pre-market", "after-hours"]:
-                premarket_price = quote.last
-                premarket_change = quote.last - quote.prevclose
+        # In pre-market or after-hours, determine the current price
+        if market_status in ["pre-market", "after-hours"]:
+            current_price = None
+            
+            # Method 1: Use last price if it's different from prevclose
+            if quote.last and quote.prevclose and quote.last != quote.prevclose:
+                current_price = quote.last
+            # Method 2: Use bid/ask mid-price if available and different from prevclose
+            elif quote.bid and quote.ask and quote.prevclose:
+                mid_price = (quote.bid + quote.ask) / 2
+                # Only use mid-price if it shows significant difference (>0.1% or >$0.05)
+                price_diff = abs(mid_price - quote.prevclose)
+                percent_diff = (price_diff / quote.prevclose) * 100
+                if price_diff > 0.05 or percent_diff > 0.1:
+                    current_price = mid_price
+            
+            # If we found a current price different from prevclose, it's pre-market data
+            if current_price and quote.prevclose:
+                premarket_price = current_price
+                premarket_change = current_price - quote.prevclose
                 premarket_change_percentage = (premarket_change / quote.prevclose) * 100
                 premarket_time = eastern_time.strftime("%H:%M (美东)")
-            # For regular market hours, if change is 0 but last != prevclose, use that data
-            elif quote.change == 0 and quote.change_percentage == 0:
-                # This might be delayed data, but still useful
-                quote.change = quote.last - quote.prevclose
-                quote.change_percentage = (quote.change / quote.prevclose) * 100
+                
+                # Also update the quote data for consistency
+                if quote.change == 0 and quote.change_percentage == 0:
+                    quote.change = premarket_change
+                    quote.change_percentage = premarket_change_percentage
         
         # Calculate turnover amount if we have price and volume
         turnover_amount = None
