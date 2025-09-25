@@ -2,6 +2,7 @@ from fastmcp import FastMCP
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 from .tools.hello_tool import hello
+from .tools.get_market_time_tool import get_market_time_status
 from .prompts.hello_prompt import call_hello_multiple
 from .config.settings import settings
 
@@ -32,6 +33,19 @@ def create_server() -> FastMCP:
             A greeting response with status and message
         """
         return await hello(name)
+
+    @mcp.tool()
+    async def get_market_time_tool() -> Dict[str, Any]:
+        """
+        Get current US market time and trading status.
+
+        Returns comprehensive market timing information including Eastern time,
+        market session status, and trading day information.
+
+        Returns:
+            Dictionary containing market time and status information
+        """
+        return await get_market_time_status()
 
     @mcp.prompt()
     async def call_hello_multiple_prompt(name: str, times: int = 3) -> str:
