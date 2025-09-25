@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Dict, Any
 from .tools.hello_tool import hello
 from .tools.get_market_time_tool import get_market_time_status
+from .tools.stock_key_info_tool import get_stock_key_info
 from .prompts.hello_prompt import call_hello_multiple
 from .config.settings import settings
 
@@ -46,6 +47,24 @@ def create_server() -> FastMCP:
             Dictionary containing market time and status information
         """
         return await get_market_time_status()
+
+    @mcp.tool()
+    async def stock_info_tool(symbol: str) -> Dict[str, Any]:
+        """
+        Get comprehensive key information for a stock symbol.
+        
+        Retrieves detailed stock information including price data, trading volume,
+        valuation metrics, and technical indicators using real-time Tradier API data.
+        The information is presented in both human-readable Chinese format and
+        structured data format for programmatic use.
+        
+        Args:
+            symbol: Stock ticker symbol (e.g., "TSLA", "AAPL", "NVDA")
+            
+        Returns:
+            Comprehensive stock information with formatted display and raw data
+        """
+        return await get_stock_key_info(symbol)
 
     @mcp.prompt()
     async def call_hello_multiple_prompt(name: str, times: int = 3) -> str:
