@@ -1,0 +1,110 @@
+[
+  {
+    "name": "大安",
+    "description": "长期、缓慢、稳定",
+    "interpretation": "求安稳，大安最吉；求变化，大安不吉",
+    "bagua": "震 (zhèn)",
+    "direction": "正东",
+    "element": "木",
+    "deity": "三清",
+    "deity_description": "道教中的至高神，包括玉清元始天尊、上清灵宝天尊和太清道德天尊",
+    "finger_position": "左手中指中段",
+    "order": 1
+  },
+  {
+    "name": "留连",
+    "description": "停止、反复、复杂",
+    "interpretation": "想挽留，留连是吉；否则不吉（恶心！）",
+    "bagua": "巽 (yuán)",
+    "direction": "东南",
+    "element": "木",
+    "deity": "文昌",
+    "deity_description": "主管文运、学业的神灵",
+    "finger_position": "左手食指上段",
+    "order": 2
+  },
+  {
+    "name": "速喜",
+    "description": "惊喜、快速、突然",
+    "interpretation": "意想不到的好事！如果这事需要稳定，那就很可能是惊吓！",
+    "bagua": "离 (lí)",
+    "direction": "正南",
+    "element": "火",
+    "deity": "雷祖",
+    "deity_description": "掌管雷电的神灵",
+    "finger_position": "左手中指上段",
+    "order": 3
+  },
+  {
+    "name": "赤口",
+    "description": "争斗、凶恶、伤害",
+    "interpretation": "最凶最恶，吵架，打架，斗争，官司，和肉体受伤",
+    "bagua": "兌 (duì)",
+    "direction": "正西",
+    "element": "金",
+    "deity": "将帅",
+    "deity_description": "保护国家和人民安全的守护神",
+    "finger_position": "左手无名指中段",
+    "order": 4
+  },
+  {
+    "name": "小吉",
+    "description": "起步、不多、尚可",
+    "interpretation": "不完美，你想要100分，只有60分，勉强及格。成中有缺，适合起步！碰上小吉，都有阻碍。",
+    "bagua": "坎 (kǎn)",
+    "direction": "正北",
+    "element": "水",
+    "deity": "真武",
+    "deity_description": "道教中掌管水行和军事力量的神灵",
+    "finger_position": "左手中指下段",
+    "order": 5
+  },
+  {
+    "name": "空亡",
+    "description": "失去、虚伪、空想",
+    "interpretation": "如果跟钱有关，跟数量投资有关，遇到空亡就算了吧。先得再失，尤忌金钱事。现实之事，遇到空亡很差！虚幻之事，遇到空亡很好！",
+    "bagua": "中 (zhōng)",
+    "direction": "中间",
+    "element": "土",
+    "deity": "玉皇",
+    "deity_description": "传统民间信仰中的至上神灵",
+    "finger_position": "左手中指中段",
+    "order": 6
+  },
+  {
+    "name": "病符",
+    "description": "病态、异常、治疗",
+    "interpretation": "病态 + 治疗 = 病符，先有病，才需要治疗。这整个过程不好受，不会特别顺利。",
+    "bagua": "坤 (kūn)",
+    "direction": "西南",
+    "element": "土",
+    "deity": "后土",
+    "deity_description": "大地女神或土地之神",
+    "finger_position": "左手无名指上段",
+    "order": 7
+  },
+  {
+    "name": "桃花",
+    "description": "欲望、牵绊、异性",
+    "interpretation": "主要是人际关系，往往和欲望、异性有关！除了谈恋爱，桃花都是不好的！事情被一些人牵绊住！",
+    "bagua": "艮 (gèn)",
+    "direction": "东北",
+    "element": "土",
+    "deity": "城隍",
+    "deity_description": "中国古代城市的守护神",
+    "finger_position": "左手食指下段",
+    "order": 8
+  },
+  {
+    "name": "天德",
+    "description": "贵人、长辈、上司老板、高远",
+    "interpretation": "求人办事，靠人成事！这事最好要求人、靠人，让贵人来帮你!如果五行上被天德所生，那这事肯定有贵人相助！",
+    "bagua": "乾 (qián)",
+    "direction": "西北",
+    "element": "金",
+    "deity": "紫薇",
+    "deity_description": "道教中的星官之神，掌管天上的星象和人间的福泽",
+    "finger_position": "左手无名指下段",
+    "order": 9
+  }
+]

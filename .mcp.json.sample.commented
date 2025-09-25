@@ -1,0 +1,58 @@
+// =============================================================================
+// MCP (Model Context Protocol) Configuration for Claude Code
+// =============================================================================
+// This file configures how Claude Code connects to your MCP server
+//
+// USAGE:
+// 1. Copy this file to .mcp.json
+// 2. Update all paths to match your local environment
+// 3. Customize the server name and environment variables
+// 4. Restart Claude Code or reload the configuration
+//
+// NOTE: JSON doesn't support comments, so remove all // comments when copying
+// =============================================================================
+
+{
+  "mcpServers": {
+    // The key here is the server name that will appear in Claude Code
+    "YourServerName": {
+      // Command to run (using uv package manager)
+      "command": "uv",
+
+      // Arguments passed to the command
+      "args": [
+        "run",
+        "python",
+        "/path/to/your/project/main.py"  // Update this to your actual project path
+      ],
+
+      // Environment variables passed to the server
+      "env": {
+        // Logging configuration
+        "LOG_LEVEL": "INFO",              // Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+        // Python path for imports
+        "PYTHONPATH": "/path/to/your/project",  // Update to your project path
+
+        // Server configuration (these override settings.py defaults)
+        "MCP_SERVER_NAME": "YourServerName",    // Should match the key above
+        "MCP_VERSION": "1.0.0",                 // Your server version
+
+        // Debug and feature flags
+        "DEBUG": "false",                       // Set to "true" for debug mode
+        "MAX_PROMPT_CALLS": "10",              // Maximum prompt iterations
+        "ENABLE_METRICS": "false"              // Enable metrics collection
+
+        // Add any additional environment variables your server needs
+        // "CUSTOM_VAR": "value"
+      }
+    }
+
+    // You can add multiple servers in the same file:
+    // "AnotherServer": {
+    //   "command": "uv",
+    //   "args": ["run", "python", "/path/to/another/server.py"],
+    //   "env": {}
+    // }
+  }
+}

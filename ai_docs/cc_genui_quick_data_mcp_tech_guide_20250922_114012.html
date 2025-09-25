@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>quick-data-mcp 项目技术指南</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        
+        article {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+            margin-top: 30px;
+            margin-bottom: 20px;
+        }
+        
+        h3 {
+            color: #34495e;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        
+        h4 {
+            color: #34495e;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        code {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #e1e8ed;
+        }
+        
+        pre {
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            border-left: 4px solid #007acc;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+            border: none;
+            border-radius: 0;
+        }
+        
+        .info-section {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .success-section {
+            background: #e8f5e8;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .warning-section {
+            background: #fef9e7;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .file-tree {
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        table th,
+        table td {
+            border: 1px solid #e1e8ed;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        table tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+        
+        li {
+            margin: 8px 0;
+        }
+        
+        .architecture-diagram {
+            background: #f8f9fa;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .component-box {
+            display: inline-block;
+            background: white;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            padding: 10px 15px;
+            margin: 5px;
+            min-width: 120px;
+        }
+        
+        .arrow {
+            font-size: 24px;
+            color: #3498db;
+            margin: 0 10px;
+        }
+        
+        .step-number {
+            background: #3498db;
+            color: white;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .expandable {
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .expandable:hover {
+            background: #f0f0f0;
+        }
+        
+        .collapsed {
+            display: none;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .toc ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <article>
+        <header>
+            <h1>🚀 quick-data-mcp 项目技术指南</h1>
+            <p><strong>项目名称:</strong> quick-data-mcp</p>
+            <p><strong>生成时间:</strong> 2025年9月22日</p>
+            <p><strong>版本:</strong> 0.1.0</p>
+        </header>
+
+        <div class="toc">
+            <h3>📋 目录</h3>
+            <ul>
+                <li><a href="#overview">1. 项目概览</a></li>
+                <li><a href="#architecture">2. 架构设计</a></li>
+                <li><a href="#directory-structure">3. 目录结构</a></li>
+                <li><a href="#implementation-patterns">4. 实现模式</a></li>
+                <li><a href="#adding-tools">5. 添加新的 MCP Server Tool</a></li>
+                <li><a href="#adding-prompts">6. 添加新的 MCP Server Prompt</a></li>
+                <li><a href="#extensibility">7. 可扩展性设计</a></li>
+                <li><a href="#best-practices">8. 最佳实践</a></li>
+            </ul>
+        </div>
+
+        <main>
+            <section id="overview">
+                <h2>1. 项目概览</h2>
+                
+                <div class="info-section">
+                    <h3>ℹ️ 项目定位</h3>
+                    <p><strong>quick-data-mcp</strong> 是一个专注于数据分析的 Model Context Protocol (MCP) 服务器，为 AI 代理提供强大的数据分析能力。</p>
+                </div>
+
+                <h3>核心特性</h3>
+                <ul>
+                    <li><strong>数据加载和管理</strong>：支持 CSV、JSON 格式的数据集加载</li>
+                    <li><strong>智能分析工具</strong>：提供 18+ 种数据分析工具</li>
+                    <li><strong>动态资源系统</strong>：基于数据特征的动态资源访问</li>
+                    <li><strong>智能提示系统</strong>：9 种针对不同分析场景的智能提示</li>
+                    <li><strong>模块化架构</strong>：完全解耦的可扩展设计</li>
+                </ul>
+
+                <h3>技术栈</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>组件</th>
+                            <th>技术</th>
+                            <th>版本</th>
+                            <th>用途</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>MCP 框架</td>
+                            <td>FastMCP</td>
+                            <td>1.9.2+</td>
+                            <td>MCP 服务器基础框架</td>
+                        </tr>
+                        <tr>
+                            <td>数据处理</td>
+                            <td>Pandas</td>
+                            <td>2.2.3+</td>
+                            <td>数据分析和处理</td>
+                        </tr>
+                        <tr>
+                            <td>可视化</td>
+                            <td>Plotly</td>
+                            <td>6.1.2+</td>
+                            <td>图表生成</td>
+                        </tr>
+                        <tr>
+                            <td>数据模型</td>
+                            <td>Pydantic</td>
+                            <td>2.0.0+</td>
+                            <td>数据验证和序列化</td>
+                        </tr>
+                        <tr>
+                            <td>测试框架</td>
+                            <td>pytest</td>
+                            <td>8.3.5+</td>
+                            <td>单元测试</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="architecture">
+                <h2>2. 架构设计</h2>
+
+                <div class="architecture-diagram">
+                    <h3>🏗️ 整体架构</h3>
+                    <div style="margin: 20px 0;">
+                        <div class="component-box">MCP Client</div>
+                        <span class="arrow">↓</span>
+                        <div class="component-box">FastMCP Server</div>
+                        <span class="arrow">↓</span>
+                        <div class="component-box">Tools + Resources + Prompts</div>
+                    </div>
+                </div>
+
+                <h3>核心架构原则</h3>
+
+                <h4>1. 分层架构</h4>
+                <pre><code>入口层 (main.py)
+    ↓
+服务器层 (server.py) - MCP 协议处理
+    ↓
+业务逻辑层 (tools/, prompts/, resources/) - 功能实现
+    ↓
+数据层 (models/schemas.py) - 数据管理
+    ↓
+配置层 (config/settings.py) - 配置管理</code></pre>
+
+                <h4>2. 模块化设计</h4>
+                <ul>
+                    <li><strong>Tools 模块</strong>：独立的功能单元，每个工具一个文件</li>
+                    <li><strong>Prompts 模块</strong>：智能对话模板，支持动态内容生成</li>
+                    <li><strong>Resources 模块</strong>：动态数据访问接口</li>
+                    <li><strong>Models 模块</strong>：数据模型和管理器</li>
+                </ul>
+
+                <h4>3. 数据流架构</h4>
+                <div class="file-tree">数据加载 → 自动模式识别 → 内存存储 → 动态分析 → 结果返回
+    ↓              ↓              ↓          ↓          ↓
+load_dataset → DatasetSchema → DatasetManager → 分析工具 → JSON 响应</div>
+            </section>
+
+            <section id="directory-structure">
+                <h2>3. 目录结构</h2>
+
+                <div class="file-tree">quick-data-mcp/
+├── main.py                           # 🚀 服务器入口点
+├── pyproject.toml                    # 📦 项目配置和依赖
+├── data/                             # 📊 示例数据集
+│   ├── ecommerce_orders.json
+│   ├── employee_survey.csv
+│   └── product_performance.csv
+├── src/mcp_server/                   # 💻 核心服务器代码
+│   ├── __init__.py
+│   ├── server.py                     # 🔧 主服务器逻辑和 MCP 装饰器
+│   ├── config/                       # ⚙️ 配置管理
+│   │   ├── __init__.py
+│   │   └── settings.py
+│   ├── models/                       # 📋 数据模型
+│   │   ├── __init__.py
+│   │   └── schemas.py               # Pydantic 模型定义
+│   ├── tools/                       # 🛠️ MCP 工具实现
+│   │   ├── __init__.py              # 工具导出管理
+│   │   ├── pandas_tools.py          # 通用 Pandas 工具
+│   │   ├── load_dataset_tool.py     # 数据加载
+│   │   ├── find_correlations_tool.py # 相关性分析
+│   │   ├── segment_by_column_tool.py # 数据分组
+│   │   ├── create_chart_tool.py     # 图表生成
+│   │   ├── validate_data_quality_tool.py # 数据质量
+│   │   ├── time_series_analysis_tool.py # 时间序列
+│   │   ├── detect_outliers_tool.py  # 异常检测
+│   │   ├── execute_custom_analytics_code_tool.py # 自定义代码
+│   │   └── ... (其他分析工具)
+│   ├── resources/                   # 📈 MCP 资源实现
+│   │   ├── __init__.py
+│   │   ├── data_resources.py        # 核心数据资源
+│   │   ├── get_dataset_schema_resource.py
+│   │   ├── get_dataset_summary_resource.py
+│   │   └── ... (其他资源)
+│   └── prompts/                     # 💬 MCP 提示实现
+│       ├── __init__.py              # 提示导出管理
+│       ├── dataset_first_look_prompt.py    # 数据初探
+│       ├── segmentation_workshop_prompt.py # 分组分析
+│       ├── correlation_investigation_prompt.py # 相关性调查
+│       ├── data_quality_assessment_prompt.py # 质量评估
+│       └── ... (其他智能提示)
+└── tests/                           # 🧪 测试代码
+    ├── test_*.py                    # 各种测试文件
+    ├── tools/
+    ├── resources/
+    └── prompts/</div>
+
+                <div class="success-section">
+                    <h3>✅ 设计亮点</h3>
+                    <ul>
+                        <li><strong>清晰分离</strong>：Tools、Resources、Prompts 完全独立</li>
+                        <li><strong>易于导航</strong>：每个功能模块都有专门的目录</li>
+                        <li><strong>测试友好</strong>：测试结构镜像源代码结构</li>
+                        <li><strong>可扩展性</strong>：新增功能只需添加对应文件</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section id="implementation-patterns">
+                <h2>4. 实现模式</h2>
+
+                <h3>4.1 MCP Server Tools 实现模式</h3>
+
+                <div class="info-section">
+                    <h4>🔧 工具设计原则</h4>
+                    <p>每个工具都是一个独立的异步函数，专注于单一职责，通过 <code>@mcp.tool()</code> 装饰器注册。</p>
+                </div>
+
+                <h4>典型工具实现模式</h4>
+                <pre><code># tools/example_tool.py
+"""工具功能描述。"""
+
+import pandas as pd
+from typing import List, Dict, Any, Optional
+from ..models.schemas import DatasetManager
+
+
+async def example_analysis(dataset_name: str, parameter: str) -> dict:
+    """
+    工具功能的详细描述。
+    
+    Args:
+        dataset_name: 数据集名称
+        parameter: 分析参数
+        
+    Returns:
+        dict: 包含分析结果的字典
+    """
+    try:
+        # 1. 获取数据集
+        df = DatasetManager.get_dataset(dataset_name)
+        
+        # 2. 执行分析逻辑
+        result = perform_analysis(df, parameter)
+        
+        # 3. 返回标准化结果
+        return {
+            "status": "success",
+            "dataset_name": dataset_name,
+            "analysis_type": "example_analysis",
+            "results": result,
+            "metadata": {
+                "rows_analyzed": len(df),
+                "columns_analyzed": len(df.columns)
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": f"Analysis failed: {str(e)}"
+        }</code></pre>
+
+                <h4>工具注册模式</h4>
+                <pre><code># server.py
+from .tools import example_analysis
+
+@mcp.tool()
+async def example_analysis_tool(dataset_name: str, parameter: str) -> dict:
+    """在服务器中注册工具的包装函数。"""
+    return await example_analysis(dataset_name, parameter)</code></pre>
+
+                <h3>4.2 MCP Server Prompts 实现模式</h3>
+
+                <div class="info-section">
+                    <h4>💬 提示设计原则</h4>
+                    <p>提示是智能对话模板，根据当前数据状态动态生成个性化的分析建议和指导。</p>
+                </div>
+
+                <h4>典型提示实现模式</h4>
+                <pre><code># prompts/example_prompt.py
+"""智能提示功能描述。"""
+
+from ..models.schemas import DatasetManager, dataset_schemas
+
+
+async def example_workshop(dataset_name: str, context: str = "general") -> str:
+    """
+    生成针对特定分析场景的智能提示。
+    
+    Args:
+        dataset_name: 数据集名称
+        context: 业务上下文
+        
+    Returns:
+        str: 格式化的提示内容
+    """
+    try:
+        # 1. 验证数据集存在
+        if dataset_name not in dataset_schemas:
+            return f"数据集 '{dataset_name}' 未加载。请先使用 load_dataset() 工具。"
+        
+        # 2. 获取数据集元信息
+        schema = dataset_schemas[dataset_name]
+        
+        # 3. 分析数据特征
+        numerical_cols = [name for name, info in schema.columns.items() 
+                         if info.suggested_role == 'numerical']
+        categorical_cols = [name for name, info in schema.columns.items() 
+                           if info.suggested_role == 'categorical']
+        
+        # 4. 生成动态提示内容
+        prompt = f"""🔍 **{dataset_name}** 数据分析工作坊
+        
+您的数据集包含 **{schema.row_count:,}** 条记录和 **{len(schema.columns)}** 个字段。
+
+**📊 可用的数值字段** ({len(numerical_cols)}个):
+{', '.join(numerical_cols) if numerical_cols else '无'}
+
+**🏷️ 可用的分类字段** ({len(categorical_cols)}个):
+{', '.join(categorical_cols) if categorical_cols else '无'}
+
+**🎯 建议的分析步骤:**
+"""
+        
+        # 5. 基于数据特征提供个性化建议
+        if numerical_cols and categorical_cols:
+            prompt += f"""
+• **分组对比分析**: 使用 `segment_by_column('{dataset_name}', '{categorical_cols[0]}')`
+• **数值关系探索**: 使用 `find_correlations('{dataset_name}')`
+"""
+        
+        prompt += f"""
+**🚀 快速开始命令:**
+• 数据概览: `resource_datasets_summary('{dataset_name}')`
+• 数据质量检查: `validate_data_quality('{dataset_name}')`
+
+您希望从哪个角度开始分析您的数据？"""
+        
+        return prompt
+        
+    except Exception as e:
+        return f"生成提示时出错: {str(e)}"</code></pre>
+
+                <h4>提示注册模式</h4>
+                <pre><code># server.py
+from .prompts import example_workshop
+
+@mcp.prompt()
+async def example_workshop_prompt(dataset_name: str, context: str = "general") -> str:
+    """在服务器中注册提示的包装函数。"""
+    return await example_workshop(dataset_name, context)</code></pre>
+
+                <h3>4.3 MCP Server Resources 实现模式</h3>
+
+                <div class="info-section">
+                    <h4>📈 资源设计原则</h4>
+                    <p>资源提供动态数据访问，根据当前状态返回实时信息，支持 URI 模式的参数化访问。</p>
+                </div>
+
+                <h4>典型资源实现模式</h4>
+                <pre><code># resources/example_resource.py
+"""动态资源功能描述。"""
+
+from ..models.schemas import DatasetManager, dataset_schemas
+
+
+async def get_dynamic_info(dataset_name: str = None) -> dict:
+    """
+    获取动态数据信息。
+    
+    Args:
+        dataset_name: 可选的数据集名称
+        
+    Returns:
+        dict: 实时数据信息
+    """
+    try:
+        if dataset_name and dataset_name in dataset_schemas:
+            # 返回特定数据集信息
+            schema = dataset_schemas[dataset_name]
+            return {
+                "dataset_name": dataset_name,
+                "rows": schema.row_count,
+                "columns": len(schema.columns),
+                "available_analyses": schema.suggested_analyses
+            }
+        else:
+            # 返回总体状态信息
+            datasets = DatasetManager.list_datasets()
+            return {
+                "loaded_datasets": len(datasets),
+                "dataset_names": datasets,
+                "status": "active" if datasets else "no_data"
+            }
+    except Exception as e:
+        return {"error": f"获取资源失败: {str(e)}"}</code></pre>
+
+                <h4>资源注册模式</h4>
+                <pre><code># server.py
+from .resources import get_dynamic_info
+
+@mcp.resource("analytics://dynamic_info")
+async def get_dynamic_info_resource() -> dict:
+    """注册全局动态信息资源。"""
+    return await get_dynamic_info()
+
+@mcp.resource("datasets://{dataset_name}/info")
+async def get_dataset_info_resource(dataset_name: str) -> dict:
+    """注册参数化数据集信息资源。"""
+    return await get_dynamic_info(dataset_name)</code></pre>
+            </section>
+
+            <section id="adding-tools">
+                <h2>5. 添加新的 MCP Server Tool</h2>
+
+                <div class="warning-section">
+                    <h3>⚠️ 开发前准备</h3>
+                    <p>在添加新工具前，请确保理解现有工具的实现模式，并遵循项目的编码规范。</p>
+                </div>
+
+                <h3>步骤详解</h3>
+
+                <h4><span class="step-number">1</span>创建工具实现文件</h4>
+                <p><strong>位置:</strong> <code>src/mcp_server/tools/your_new_tool.py</code></p>
+                <pre><code># src/mcp_server/tools/advanced_clustering_tool.py
+"""高级聚类分析工具。"""
+
+import pandas as pd
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from typing import List, Dict, Any, Optional
+from ..models.schemas import DatasetManager
+
+
+async def advanced_clustering(
+    dataset_name: str, 
+    feature_columns: List[str],
+    n_clusters: int = 3,
+    algorithm: str = "kmeans"
+) -> dict:
+    """
+    对数据集执行高级聚类分析。
+    
+    Args:
+        dataset_name: 目标数据集名称
+        feature_columns: 用于聚类的特征列
+        n_clusters: 聚类数量（默认3）
+        algorithm: 聚类算法（kmeans, dbscan等）
+        
+    Returns:
+        dict: 聚类分析结果
+    """
+    try:
+        # 获取数据集
+        df = DatasetManager.get_dataset(dataset_name)
+        
+        # 验证特征列存在
+        missing_cols = [col for col in feature_columns if col not in df.columns]
+        if missing_cols:
+            return {
+                "status": "error",
+                "message": f"特征列不存在: {missing_cols}"
+            }
+        
+        # 准备聚类数据
+        features = df[feature_columns].copy()
+        
+        # 处理缺失值
+        features = features.fillna(features.mean())
+        
+        # 标准化特征
+        scaler = StandardScaler()
+        features_scaled = scaler.fit_transform(features)
+        
+        # 执行聚类
+        if algorithm == "kmeans":
+            clusterer = KMeans(n_clusters=n_clusters, random_state=42)
+            cluster_labels = clusterer.fit_predict(features_scaled)
+            
+            # 计算聚类中心
+            cluster_centers = scaler.inverse_transform(clusterer.cluster_centers_)
+        else:
+            return {
+                "status": "error",
+                "message": f"不支持的聚类算法: {algorithm}"
+            }
+        
+        # 添加聚类标签到原数据
+        df_with_clusters = df.copy()
+        df_with_clusters['cluster_label'] = cluster_labels
+        
+        # 计算聚类统计信息
+        cluster_stats = []
+        for i in range(n_clusters):
+            cluster_data = df_with_clusters[df_with_clusters['cluster_label'] == i]
+            cluster_stats.append({
+                "cluster_id": i,
+                "size": len(cluster_data),
+                "percentage": len(cluster_data) / len(df) * 100,
+                "center": dict(zip(feature_columns, cluster_centers[i]))
+            })
+        
+        return {
+            "status": "success",
+            "dataset_name": dataset_name,
+            "analysis_type": "advanced_clustering",
+            "results": {
+                "algorithm": algorithm,
+                "n_clusters": n_clusters,
+                "feature_columns": feature_columns,
+                "cluster_stats": cluster_stats,
+                "silhouette_score": calculate_silhouette_score(features_scaled, cluster_labels)
+            },
+            "metadata": {
+                "total_points": len(df),
+                "features_used": len(feature_columns),
+                "algorithm_params": {"n_clusters": n_clusters}
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"聚类分析失败: {str(e)}"
+        }
+
+
+def calculate_silhouette_score(features, labels):
+    """计算轮廓系数评估聚类质量。"""
+    try:
+        from sklearn.metrics import silhouette_score
+        return float(silhouette_score(features, labels))
+    except:
+        return None</code></pre>
+
+                <h4><span class="step-number">2</span>更新工具包导出</h4>
+                <p><strong>文件:</strong> <code>src/mcp_server/tools/__init__.py</code></p>
+                <pre><code># 在导入区域添加
+from .advanced_clustering_tool import advanced_clustering
+
+# 在 __all__ 列表中添加
+__all__ = [
+    # ... 现有工具
+    "advanced_clustering"  # 添加新工具
+]</code></pre>
+
+                <h4><span class="step-number">3</span>在服务器中注册工具</h4>
+                <p><strong>文件:</strong> <code>src/mcp_server/server.py</code></p>
+                <pre><code># 在导入区域添加
+from .tools import advanced_clustering
+
+# 在工具注册区域添加
+@mcp.tool()
+async def advanced_clustering_analysis(
+    dataset_name: str, 
+    feature_columns: List[str],
+    n_clusters: int = 3,
+    algorithm: str = "kmeans"
+) -> dict:
+    """执行高级聚类分析，发现数据中的自然分组模式。"""
+    return await advanced_clustering(dataset_name, feature_columns, n_clusters, algorithm)</code></pre>
+
+                <h4><span class="step-number">4</span>创建单元测试</h4>
+                <p><strong>位置:</strong> <code>tests/tools/test_advanced_clustering_tool.py</code></p>
+                <pre><code># tests/tools/test_advanced_clustering_tool.py
+"""高级聚类工具测试。"""
+
+import pytest
+import pandas as pd
+from src.mcp_server.tools.advanced_clustering_tool import advanced_clustering
+from src.mcp_server.models.schemas import DatasetManager
+
+
+@pytest.fixture
+def sample_clustering_data():
+    """创建示例聚类数据。"""
+    data = {
+        "feature1": [1, 2, 1, 2, 10, 11, 10, 11],
+        "feature2": [1, 1, 2, 2, 10, 10, 11, 11],
+        "other_col": ["a", "b", "c", "d", "e", "f", "g", "h"]
+    }
+    df = pd.DataFrame(data)
+    DatasetManager.loaded_datasets["test_clustering"] = df
+    return df
+
+
+@pytest.mark.asyncio
+async def test_successful_clustering(sample_clustering_data):
+    """测试成功的聚类分析。"""
+    result = await advanced_clustering(
+        dataset_name="test_clustering",
+        feature_columns=["feature1", "feature2"],
+        n_clusters=2
+    )
+    
+    assert result["status"] == "success"
+    assert result["results"]["n_clusters"] == 2
+    assert len(result["results"]["cluster_stats"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_missing_dataset():
+    """测试数据集不存在的情况。"""
+    result = await advanced_clustering(
+        dataset_name="nonexistent",
+        feature_columns=["feature1"],
+        n_clusters=2
+    )
+    
+    assert result["status"] == "error"
+    assert "not loaded" in result["message"].lower()
+
+
+@pytest.mark.asyncio  
+async def test_invalid_features(sample_clustering_data):
+    """测试无效特征列。"""
+    result = await advanced_clustering(
+        dataset_name="test_clustering",
+        feature_columns=["nonexistent_column"],
+        n_clusters=2
+    )
+    
+    assert result["status"] == "error"
+    assert "不存在" in result["message"]</code></pre>
+
+                <h4><span class="step-number">5</span>验证和测试</h4>
+                <pre><code># 运行特定测试
+uv run pytest tests/tools/test_advanced_clustering_tool.py -v
+
+# 运行所有测试
+uv run pytest tests/ -v
+
+# 启动服务器测试
+uv run python main.py</code></pre>
+
+                <div class="success-section">
+                    <h3>✅ 工具添加完成</h3>
+                    <p>现在您的新工具已经完全集成到 MCP 服务器中，客户端可以通过 <code>advanced_clustering_analysis</code> 调用它。</p>
+                </div>
+            </section>
+
+            <section id="adding-prompts">
+                <h2>6. 添加新的 MCP Server Prompt</h2>
+
+                <h3>步骤详解</h3>
+
+                <h4><span class="step-number">1</span>创建提示实现文件</h4>
+                <p><strong>位置:</strong> <code>src/mcp_server/prompts/clustering_strategy_prompt.py</code></p>
+                <pre><code># src/mcp_server/prompts/clustering_strategy_prompt.py
+"""聚类策略规划提示。"""
+
+from ..models.schemas import DatasetManager, dataset_schemas
+from typing import Optional
+
+
+async def clustering_strategy_workshop(dataset_name: str, business_goal: str = "customer_segmentation") -> str:
+    """
+    基于数据特征生成聚类分析策略提示。
+    
+    Args:
+        dataset_name: 目标数据集名称
+        business_goal: 业务目标（customer_segmentation, product_grouping, etc.）
+        
+    Returns:
+        str: 个性化的聚类策略指导
+    """
+    try:
+        # 验证数据集存在
+        if dataset_name not in dataset_schemas:
+            return f"""❌ **数据集 '{dataset_name}' 未加载**
+
+请先使用以下命令加载数据集:
+```
+load_dataset('path/to/your/data.csv', '{dataset_name}')
+```
+
+然后重新调用此提示。"""
+        
+        schema = dataset_schemas[dataset_name]
+        
+        # 分析数据特征
+        numerical_cols = [name for name, info in schema.columns.items() 
+                         if info.suggested_role == 'numerical']
+        categorical_cols = [name for name, info in schema.columns.items() 
+                           if info.suggested_role == 'categorical']
+        temporal_cols = [name for name, info in schema.columns.items() 
+                        if info.suggested_role == 'temporal']
+        
+        # 生成动态策略建议
+        prompt = f"""🎯 **{dataset_name} 聚类分析策略工作坊**
+
+您的数据集包含 **{schema.row_count:,}** 条记录，我们来制定最优的聚类策略！
+
+## 📊 数据特征分析
+
+**数值型特征** ({len(numerical_cols)}个):
+{', '.join(numerical_cols) if numerical_cols else '⚠️ 无数值型特征'}
+
+**分类型特征** ({len(categorical_cols)}个):
+{', '.join(categorical_cols) if categorical_cols else '⚠️ 无分类型特征'}
+
+**时间型特征** ({len(temporal_cols)}个):
+{', '.join(temporal_cols) if temporal_cols else '⚠️ 无时间型特征'}
+
+## 🎯 业务目标: {business_goal.replace('_', ' ').title()}
+
+"""
+        
+        # 基于业务目标和数据特征提供策略建议
+        if business_goal == "customer_segmentation":
+            prompt += """## 📈 客户细分策略建议
+
+**第一阶段: 特征工程**
+"""
+            if numerical_cols:
+                prompt += f"""• 使用数值特征进行RFM分析: {numerical_cols[:3]}
+• 建议聚类数量: 3-5个客户群体
+• 关键命令: `advanced_clustering_analysis('{dataset_name}', {numerical_cols[:3]}, n_clusters=4)`
+"""
+            
+            if categorical_cols:
+                prompt += f"""• 考虑分类特征的影响: {categorical_cols[:2]}
+• 可以先按 {categorical_cols[0]} 分组再聚类
+"""
+                
+        elif business_goal == "product_grouping":
+            prompt += """## 🛍️ 产品分组策略建议
+
+**第一阶段: 产品特征聚类**
+"""
+            if numerical_cols:
+                product_features = [col for col in numerical_cols if any(keyword in col.lower() 
+                                  for keyword in ['price', 'cost', 'rating', 'sales', 'revenue'])]
+                if product_features:
+                    prompt += f"""• 使用产品相关特征: {product_features}
+• 建议聚类数量: 3-6个产品类别
+• 关键命令: `advanced_clustering_analysis('{dataset_name}', {product_features}, n_clusters=5)`
+"""
+        
+        # 通用聚类建议
+        prompt += f"""
+## 🚀 执行步骤
+
+**步骤1: 数据预处理**
+```
+# 检查数据质量
+validate_data_quality('{dataset_name}')
+
+# 查看特征分布
+analyze_distributions('{dataset_name}', '{numerical_cols[0] if numerical_cols else 'column_name'}')
+```
+
+**步骤2: 特征选择**
+"""
+        
+        if len(numerical_cols) >= 2:
+            prompt += f"""```
+# 分析特征相关性
+find_correlations('{dataset_name}', {numerical_cols[:4]})
+```
+"""
+        
+        prompt += f"""
+**步骤3: 聚类执行**
+```
+# 执行聚类分析
+advanced_clustering_analysis(
+    dataset_name='{dataset_name}',
+    feature_columns={numerical_cols[:3] if len(numerical_cols) >= 3 else numerical_cols},
+    n_clusters=4,
+    algorithm='kmeans'
+)
+```
+
+**步骤4: 结果验证**
+```
+# 按聚类结果分组分析
+segment_by_column('{dataset_name}', 'cluster_label')
+
+# 生成聚类可视化
+create_chart('{dataset_name}', 'scatter', '{numerical_cols[0] if numerical_cols else 'x_col'}', 
+             '{numerical_cols[1] if len(numerical_cols) > 1 else 'y_col'}', 
+             groupby_column='cluster_label')
+```
+
+## 💡 高级技巧
+
+"""
+        
+        if len(numerical_cols) > 5:
+            prompt += """• **维度过多**: 考虑使用PCA降维或特征选择
+• **特征重要性**: 使用 `calculate_feature_importance()` 选择关键特征
+"""
+        
+        if temporal_cols:
+            prompt += f"""• **时间维度**: 考虑基于 {temporal_cols[0]} 的时间窗口聚类
+• **趋势聚类**: 分析时间序列模式的相似性
+"""
+        
+        prompt += f"""
+## 🎯 预期输出
+
+成功的聚类分析将为您提供:
+- 📊 每个聚类的统计特征
+- 📈 聚类质量评估（轮廓系数）
+- 🏷️ 聚类标签添加到原数据
+- 📋 业务可解释的聚类描述
+
+**准备好开始了吗？** 选择上述任一命令开始您的聚类分析之旅！
+"""
+        
+        return prompt
+        
+    except Exception as e:
+        return f"生成聚类策略提示时出错: {str(e)}"</code></pre>
+
+                <h4><span class="step-number">2</span>更新提示包导出</h4>
+                <p><strong>文件:</strong> <code>src/mcp_server/prompts/__init__.py</code></p>
+                <pre><code># 添加导入
+from .clustering_strategy_prompt import clustering_strategy_workshop
+
+# 更新 __all__ 列表
+__all__ = [
+    # ... 现有提示
+    "clustering_strategy_workshop"  # 添加新提示
+]</code></pre>
+
+                <h4><span class="step-number">3</span>在服务器中注册提示</h4>
+                <p><strong>文件:</strong> <code>src/mcp_server/server.py</code></p>
+                <pre><code># 在导入区域添加
+from .prompts import clustering_strategy_workshop
+
+# 在提示注册区域添加
+@mcp.prompt()
+async def clustering_strategy_prompt(dataset_name: str, business_goal: str = "customer_segmentation") -> str:
+    """生成基于数据特征的聚类分析策略和执行指导。"""
+    return await clustering_strategy_workshop(dataset_name, business_goal)</code></pre>
+
+                <h4><span class="step-number">4</span>创建提示测试</h4>
+                <p><strong>位置:</strong> <code>tests/prompts/test_clustering_strategy_prompt.py</code></p>
+                <pre><code># tests/prompts/test_clustering_strategy_prompt.py
+"""聚类策略提示测试。"""
+
+import pytest
+import pandas as pd
+from src.mcp_server.prompts.clustering_strategy_prompt import clustering_strategy_workshop
+from src.mcp_server.models.schemas import DatasetManager, DatasetSchema, dataset_schemas
+
+
+@pytest.fixture
+def sample_customer_data():
+    """创建示例客户数据。"""
+    data = {
+        "customer_id": range(1, 101),
+        "age": np.random.randint(18, 80, 100),
+        "income": np.random.randint(30000, 150000, 100),
+        "spending": np.random.randint(1000, 50000, 100),
+        "category": np.random.choice(["A", "B", "C"], 100),
+        "signup_date": pd.date_range("2023-01-01", periods=100, freq="D")
+    }
+    df = pd.DataFrame(data)
+    
+    # 创建数据集和模式
+    schema = DatasetSchema.from_dataframe(df, "customer_test")
+    dataset_schemas["customer_test"] = schema
+    DatasetManager.loaded_datasets["customer_test"] = df
+    
+    return df
+
+
+@pytest.mark.asyncio
+async def test_clustering_strategy_generation(sample_customer_data):
+    """测试聚类策略生成。"""
+    result = await clustering_strategy_workshop("customer_test", "customer_segmentation")
+    
+    assert "customer_test" in result
+    assert "聚类分析策略" in result
+    assert "advanced_clustering_analysis" in result
+    assert "数值型特征" in result
+
+
+@pytest.mark.asyncio
+async def test_missing_dataset():
+    """测试数据集不存在的情况。"""
+    result = await clustering_strategy_workshop("nonexistent", "customer_segmentation")
+    
+    assert "未加载" in result
+    assert "load_dataset" in result
+
+
+@pytest.mark.asyncio
+async def test_different_business_goals(sample_customer_data):
+    """测试不同业务目标的策略。"""
+    # 客户细分
+    customer_result = await clustering_strategy_workshop("customer_test", "customer_segmentation")
+    assert "客户细分策略" in customer_result
+    
+    # 产品分组
+    product_result = await clustering_strategy_workshop("customer_test", "product_grouping")
+    assert "产品分组策略" in product_result</code></pre>
+
+                <div class="success-section">
+                    <h3>✅ 提示添加完成</h3>
+                    <p>您的新提示现在可以通过 <code>clustering_strategy_prompt</code> 在 MCP 客户端中使用了！</p>
+                </div>
+            </section>
+
+            <section id="extensibility">
+                <h2>7. 可扩展性设计</h2>
+
+                <div class="info-section">
+                    <h3>ℹ️ 设计哲学</h3>
+                    <p>quick-data-mcp 的可扩展性设计基于"开放-封闭原则"：对扩展开放，对修改封闭。</p>
+                </div>
+
+                <h3>7.1 模块化架构的可扩展性</h3>
+
+                <h4>📦 包级别的扩展</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>组件类型</th>
+                            <th>扩展方式</th>
+                            <th>注册机制</th>
+                            <th>自动发现</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Tools</td>
+                            <td>添加新文件到 tools/</td>
+                            <td>__init__.py 导出 + server.py 注册</td>
+                            <td>❌ 手动</td>
+                        </tr>
+                        <tr>
+                            <td>Prompts</td>
+                            <td>添加新文件到 prompts/</td>
+                            <td>__init__.py 导出 + server.py 注册</td>
+                            <td>❌ 手动</td>
+                        </tr>
+                        <tr>
+                            <td>Resources</td>
+                            <td>添加新函数到 resources/</td>
+                            <td>直接在 server.py 注册</td>
+                            <td>❌ 手动</td>
+                        </tr>
+                        <tr>
+                            <td>Models</td>
+                            <td>扩展 schemas.py</td>
+                            <td>自动通过导入</td>
+                            <td>✅ 自动</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>🔧 工具扩展模式</h4>
+                <pre><code># 新增工具的标准流程
+1. 创建工具文件: tools/new_tool.py
+   └── 实现异步函数: async def new_analysis()
+
+2. 注册到包: tools/__init__.py  
+   └── 添加导入和 __all__ 导出
+
+3. 注册到服务器: server.py
+   └── 添加 @mcp.tool() 装饰器包装
+
+4. 添加测试: tests/tools/test_new_tool.py
+   └── 验证功能正确性</code></pre>
+
+                <h3>7.2 数据驱动的可扩展性</h3>
+
+                <h4>🧠 智能模式识别</h4>
+                <p><code>DatasetSchema.from_dataframe()</code> 方法自动分析数据特征：</p>
+                <pre><code># 自动识别列类型和建议分析
+@classmethod
+def from_dataframe(cls, df: pd.DataFrame, name: str) -> 'DatasetSchema':
+    columns = {}
+    for col in df.columns:
+        # 自动分类：numerical, categorical, temporal, identifier
+        columns[col] = ColumnInfo.from_series(df[col], col)
+    
+    # 基于列类型自动生成分析建议
+    suggestions = []
+    if len(numerical_cols) >= 2:
+        suggestions.append("correlation_analysis")
+    if categorical_cols:
+        suggestions.append("segmentation_analysis")
+    # ... 更多智能建议</code></pre>
+
+                <h4>📈 动态资源生成</h4>
+                <p>资源系统支持参数化 URI，实现动态数据访问：</p>
+                <pre><code># 支持任意数据集的动态资源
+@mcp.resource("datasets://{dataset_name}/schema")
+async def get_dataset_schema(dataset_name: str) -> dict:
+    # 动态返回指定数据集的模式信息
+    return await data_resources.get_dataset_schema(dataset_name)
+
+# 新数据集加载后自动可用，无需额外配置</code></pre>
+
+                <h3>7.3 配置驱动的可扩展性</h3>
+
+                <h4>⚙️ 灵活的设置系统</h4>
+                <pre><code># config/settings.py - 易于扩展的配置
+class Settings:
+    def __init__(self):
+        # 核心设置
+        self.server_name = os.getenv("MCP_SERVER_NAME", "quick-data-mcp")
+        self.version = "0.1.0"
+        
+        # 可扩展的功能开关
+        self.enable_advanced_analytics = os.getenv("ENABLE_ADVANCED", "true").lower() == "true"
+        self.max_dataset_size_mb = int(os.getenv("MAX_DATASET_SIZE", "500"))
+        
+        # 外部服务集成
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.enable_ai_insights = bool(self.openai_api_key)
+        
+    @property
+    def feature_flags(self) -> dict:
+        """动态特性标志"""
+        return {
+            "advanced_analytics": self.enable_advanced_analytics,
+            "ai_insights": self.enable_ai_insights,
+            "large_datasets": self.max_dataset_size_mb > 100
+        }</code></pre>
+
+                <h3>7.4 插件化架构展望</h3>
+
+                <div class="warning-section">
+                    <h3>⚠️ 未来扩展计划</h3>
+                    <p>以下是计划中的高级可扩展性功能，目前尚未实现：</p>
+                </div>
+
+                <h4>🔌 插件发现机制</h4>
+                <pre><code># 未来的自动插件发现（概念设计）
+class PluginManager:
+    @staticmethod
+    def discover_plugins():
+        """自动发现并加载插件"""
+        for plugin_dir in Path("plugins").iterdir():
+            if plugin_dir.is_dir() and (plugin_dir / "__init__.py").exists():
+                plugin = importlib.import_module(f"plugins.{plugin_dir.name}")
+                if hasattr(plugin, 'register_tools'):
+                    plugin.register_tools(mcp)
+                if hasattr(plugin, 'register_prompts'):
+                    plugin.register_prompts(mcp)</code></pre>
+
+                <h4>📊 分析引擎抽象</h4>
+                <pre><code># 可扩展的分析引擎接口（概念设计）
+class AnalysisEngine(ABC):
+    @abstractmethod
+    async def analyze(self, dataset: pd.DataFrame, params: dict) -> dict:
+        pass
+
+class PandasEngine(AnalysisEngine):
+    async def analyze(self, dataset, params):
+        # 当前的 Pandas 实现
+        pass
+
+class SparkEngine(AnalysisEngine):
+    async def analyze(self, dataset, params):
+        # 大数据 Spark 实现
+        pass</code></pre>
+
+                <h3>7.5 当前可扩展性优势</h3>
+
+                <div class="success-section">
+                    <h3>✅ 已实现的可扩展性特性</h3>
+                    <ul>
+                        <li><strong>零配置数据集支持</strong>：新数据格式通过修改 DatasetManager 即可支持</li>
+                        <li><strong>智能分析建议</strong>：基于数据特征自动推荐适用的分析方法</li>
+                        <li><strong>动态资源系统</strong>：支持任意数据集的参数化资源访问</li>
+                        <li><strong>模块化工具包</strong>：每个工具独立开发、测试、部署</li>
+                        <li><strong>上下文感知提示</strong>：提示内容根据数据特征动态生成</li>
+                        <li><strong>灵活的错误处理</strong>：统一的错误响应格式，易于调试</li>
+                    </ul>
+                </div>
+
+                <h4>🎯 扩展性最佳实践</h4>
+                <ol>
+                    <li><strong>遵循现有模式</strong>：新功能应该符合现有的代码结构和命名约定</li>
+                    <li><strong>完整的测试覆盖</strong>：每个新组件都应该有对应的单元测试</li>
+                    <li><strong>文档先行</strong>：新功能的文档字符串应该清晰描述用途和参数</li>
+                    <li><strong>渐进式增强</strong>：新功能应该向后兼容，不破坏现有功能</li>
+                    <li><strong>性能考虑</strong>：大数据处理功能应该考虑内存和计算效率</li>
+                </ol>
+            </section>
+
+            <section id="best-practices">
+                <h2>8. 最佳实践</h2>
+
+                <h3>8.1 代码质量规范</h3>
+
+                <h4>📝 文档字符串标准</h4>
+                <pre><code>async def example_function(param1: str, param2: int = 5) -> dict:
+    """
+    功能的简短描述（一句话）。
+    
+    更详细的功能描述，解释这个函数的作用，使用场景，
+    以及任何重要的注意事项。
+    
+    Args:
+        param1: 参数1的描述，说明类型和用途
+        param2: 参数2的描述，包括默认值说明
+        
+    Returns:
+        dict: 返回值的描述，说明字典的结构和含义
+        
+    Raises:
+        ValueError: 什么情况下会抛出这个异常
+        
+    Examples:
+        >>> result = await example_function("test", 10)
+        >>> print(result["status"])
+        "success"
+    """</code></pre>
+
+                <h4>🎯 错误处理模式</h4>
+                <pre><code># 标准错误处理模式
+async def robust_analysis(dataset_name: str, params: dict) -> dict:
+    try:
+        # 1. 输入验证
+        if not dataset_name:
+            return {
+                "status": "error",
+                "error_type": "validation_error",
+                "message": "数据集名称不能为空"
+            }
+        
+        # 2. 数据获取
+        try:
+            df = DatasetManager.get_dataset(dataset_name)
+        except ValueError as e:
+            return {
+                "status": "error", 
+                "error_type": "dataset_not_found",
+                "message": f"数据集 '{dataset_name}' 未加载：{str(e)}"
+            }
+        
+        # 3. 业务逻辑
+        result = perform_analysis(df, params)
+        
+        # 4. 成功响应
+        return {
+            "status": "success",
+            "dataset_name": dataset_name,
+            "analysis_type": "robust_analysis",
+            "results": result,
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "rows_processed": len(df)
+            }
+        }
+        
+    except Exception as e:
+        # 5. 未预期错误
+        return {
+            "status": "error",
+            "error_type": "unexpected_error", 
+            "message": f"分析过程中发生错误：{str(e)}",
+            "debug_info": {
+                "function": "robust_analysis",
+                "parameters": {"dataset_name": dataset_name}
+            }
+        }</code></pre>
+
+                <h3>8.2 性能优化实践</h3>
+
+                <h4>💾 内存管理</h4>
+                <pre><code># 内存效率的数据处理
+async def memory_efficient_analysis(dataset_name: str) -> dict:
+    try:
+        df = DatasetManager.get_dataset(dataset_name)
+        
+        # 1. 检查数据集大小
+        memory_usage = df.memory_usage(deep=True).sum() / 1024**2  # MB
+        if memory_usage > 500:  # 500MB 阈值
+            # 建议采样或分块处理
+            return {
+                "status": "warning",
+                "message": f"数据集过大（{memory_usage:.1f}MB），建议先采样",
+                "suggestions": [
+                    f"使用采样：load_dataset(path, '{dataset_name}', sample_size=10000)",
+                    "考虑数据预处理降低内存使用"
+                ]
+            }
+        
+        # 2. 分块处理大型计算
+        chunk_size = min(1000, len(df))
+        results = []
+        
+        for i in range(0, len(df), chunk_size):
+            chunk = df.iloc[i:i+chunk_size]
+            chunk_result = process_chunk(chunk)
+            results.append(chunk_result)
+            
+        # 3. 合并结果
+        final_result = merge_chunk_results(results)
+        
+        return {
+            "status": "success",
+            "results": final_result,
+            "performance_info": {
+                "memory_used_mb": memory_usage,
+                "chunks_processed": len(results)
+            }
+        }
+        
+    except MemoryError:
+        return {
+            "status": "error",
+            "error_type": "memory_error",
+            "message": "内存不足，请减少数据集大小或使用采样"
+        }</code></pre>
+
+                <h3>8.3 测试策略</h3>
+
+                <h4>🧪 测试层次</h4>
+                <pre><code># 1. 单元测试 - 测试单个函数
+@pytest.mark.asyncio
+async def test_basic_functionality():
+    """测试基本功能是否正常工作"""
+    result = await my_function("valid_input")
+    assert result["status"] == "success"
+
+# 2. 集成测试 - 测试模块间交互
+@pytest.mark.asyncio  
+async def test_end_to_end_workflow():
+    """测试完整的分析工作流"""
+    # 加载数据
+    load_result = await load_dataset("test.csv", "test_data")
+    assert load_result["status"] == "success"
+    
+    # 执行分析
+    analysis_result = await my_analysis("test_data")
+    assert analysis_result["status"] == "success"
+    
+    # 验证结果
+    assert "results" in analysis_result
+
+# 3. 错误场景测试
+@pytest.mark.asyncio
+async def test_error_scenarios():
+    """测试各种错误情况的处理"""
+    # 数据集不存在
+    result = await my_function("nonexistent")
+    assert result["status"] == "error"
+    assert "not found" in result["message"].lower()
+    
+    # 无效参数
+    result = await my_function("", invalid_param=True)
+    assert result["status"] == "error"</code></pre>
+
+                <h3>8.4 MCP 特定最佳实践</h3>
+
+                <h4>🔧 工具设计原则</h4>
+                <ul>
+                    <li><strong>单一职责</strong>：每个工具只做一件事，做好一件事</li>
+                    <li><strong>幂等性</strong>：相同输入应产生相同输出</li>
+                    <li><strong>状态无关</strong>：工具不应依赖全局状态（除了数据集存储）</li>
+                    <li><strong>参数验证</strong>：严格验证输入参数</li>
+                    <li><strong>结果标准化</strong>：使用统一的响应格式</li>
+                </ul>
+
+                <h4>💬 提示设计原则</h4>
+                <ul>
+                    <li><strong>上下文感知</strong>：基于当前数据状态生成个性化内容</li>
+                    <li><strong>可操作性</strong>：提供具体的命令和步骤</li>
+                    <li><strong>层次化信息</strong>：从概览到详细，满足不同需求</li>
+                    <li><strong>业务导向</strong>：连接技术分析与业务价值</li>
+                    <li><strong>渐进式引导</strong>：从简单到复杂的学习路径</li>
+                </ul>
+
+                <h4>📈 资源设计原则</h4>
+                <ul>
+                    <li><strong>实时性</strong>：反映当前系统状态</li>
+                    <li><strong>参数化</strong>：支持灵活的数据访问模式</li>
+                    <li><strong>轻量级</strong>：快速响应，避免重计算</li>
+                    <li><strong>结构化</strong>：清晰的数据结构便于处理</li>
+                    <li><strong>版本兼容</strong>：保持向后兼容性</li>
+                </ul>
+
+                <div class="success-section">
+                    <h3>✅ 开发检查清单</h3>
+                    <h4>新功能开发前：</h4>
+                    <ul>
+                        <li>☐ 阅读现有代码，理解实现模式</li>
+                        <li>☐ 确定功能分类（Tool/Prompt/Resource）</li>
+                        <li>☐ 设计输入输出接口</li>
+                        <li>☐ 规划测试用例</li>
+                    </ul>
+                    
+                    <h4>开发过程中：</h4>
+                    <ul>
+                        <li>☐ 遵循命名约定</li>
+                        <li>☐ 添加完整的文档字符串</li>
+                        <li>☐ 实现错误处理</li>
+                        <li>☐ 编写单元测试</li>
+                    </ul>
+                    
+                    <h4>开发完成后：</h4>
+                    <ul>
+                        <li>☐ 运行所有测试</li>
+                        <li>☐ 验证 MCP 集成</li>
+                        <li>☐ 更新相关文档</li>
+                        <li>☐ 代码审查</li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #3498db; text-align: center; color: #7f8c8d;">
+                <p><strong>📚 quick-data-mcp 技术指南</strong></p>
+                <p>生成时间：2025年9月22日 | 项目版本：0.1.0</p>
+                <p>🔗 <a href="https://github.com/your-repo/quick-data-mcp" style="color: #3498db;">项目仓库</a> | 
+                   📖 <a href="https://docs.anthropic.com/en/docs/claude-code/overview" style="color: #3498db;">Claude Code 文档</a></p>
+            </div>
+        </footer>
+    </article>
+
+    <script>
+        // 添加展开/收缩功能
+        document.querySelectorAll('.expandable').forEach(element => {
+            element.addEventListener('click', () => {
+                const target = element.nextElementSibling;
+                if (target) {
+                    target.classList.toggle('collapsed');
+                    element.textContent = target.classList.contains('collapsed') ? 
+                        element.textContent.replace('▼', '▶') : 
+                        element.textContent.replace('▶', '▼');
+                }
+            });
+        });
+
+        // 平滑滚动到锚点
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 代码块复制功能
+        document.querySelectorAll('pre code').forEach(block => {
+            const button = document.createElement('button');
+            button.textContent = '复制';
+            button.style.cssText = `
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                background: #3498db;
+                color: white;
+                border: none;
+                padding: 4px 8px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+            `;
+            
+            const pre = block.parentElement;
+            pre.style.position = 'relative';
+            pre.appendChild(button);
+            
+            button.addEventListener('click', () => {
+                navigator.clipboard.writeText(block.textContent).then(() => {
+                    button.textContent = '已复制!';
+                    setTimeout(() => button.textContent = '复制', 1000);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

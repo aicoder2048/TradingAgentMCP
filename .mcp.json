@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "TradingAgentMCP": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "/Users/szou/Python/Playground/TradingAgentMCP/main.py"
+      ],
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONPATH": "/Users/szou/Python/Playground/TradingAgentMCP"
+      }
+    }
+  }
+}
