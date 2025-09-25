@@ -448,16 +448,28 @@ class StockInfoProcessor:
             output += f"\n- 平均价: {format_currency(stock_info.average_price)}"
         output += f"\n- 每手: {stock_info.lot_size}股"
         
-        # Add pre-market data if available
+        # Add extended hours data if available
         if stock_info.premarket_price:
-            output += f"\n\n**盘前交易**"
-            output += f"\n- 盘前价格: {format_currency(stock_info.premarket_price)}"
+            # Determine the correct label based on market status
+            if stock_info.market_status == "after-hours":
+                section_title = "**盘后交易**"
+                price_label = "盘后价格"
+                change_label = "盘后变动"
+                time_label = "盘后时间"
+            else:  # pre-market or other
+                section_title = "**盘前交易**"
+                price_label = "盘前价格"
+                change_label = "盘前变动"
+                time_label = "盘前时间"
+                
+            output += f"\n\n{section_title}"
+            output += f"\n- {price_label}: {format_currency(stock_info.premarket_price)}"
             if stock_info.premarket_change:
                 premarket_change_str = format_change_with_sign(stock_info.premarket_change)
                 premarket_pct_str = format_percentage(stock_info.premarket_change_percentage)
-                output += f"\n- 盘前变动: {premarket_change_str} ({premarket_pct_str})"
+                output += f"\n- {change_label}: {premarket_change_str} ({premarket_pct_str})"
             if stock_info.premarket_time:
-                output += f"\n- 盘前时间: {stock_info.premarket_time}"
+                output += f"\n- {time_label}: {stock_info.premarket_time}"
         
         return output
     
