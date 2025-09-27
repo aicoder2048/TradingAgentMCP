@@ -162,7 +162,7 @@ class CoveredCallAnalyzer:
             greeks = option.greeks or {}
             delta = greeks.get("delta", 0)
             theta = greeks.get("theta", 0)
-            implied_vol = greeks.get("mid_iv", 0)
+            implied_vol = greeks.get("mid_iv", 0.25)  # 默认25%
             
             # 计算到期天数
             exp_date = datetime.strptime(option.expiration_date, "%Y-%m-%d").date()
@@ -204,8 +204,49 @@ class CoveredCallAnalyzer:
             opportunity_cost_per_share = max(0, underlying_price * 0.05 - (strike - underlying_price))  # 假设5%上涨
             total_opportunity_cost = opportunity_cost_per_share * shares_covered
             
-            # 风险指标
-            assignment_probability = delta * 100  # Delta近似为分配概率
+            # 使用精确的Black-Scholes被行权概率计算
+            from src.option.assignment_probability import OptionAssignmentCalculator
+            
+            assignment_calculator = OptionAssignmentCalculator()
+            
+            # 计算精确被行权概率（call期权）
+            assignment_result = assignment_calculator.calculate_assignment_probability(
+                underlying_price=underlying_price,
+                strike_price=strike,
+                time_to_expiry_days=days_to_expiry,
+                implied_volatility=implied_vol,
+                option_type="call"
+            )
+            
+            if assignment_result["status"] == "success":
+                # 使用精确计算结果
+                assignment_probability = assignment_result["assignment_probability"] * 100  # 转换为百分比
+                assignment_risk_level = assignment_result["assignment_risk_level"]
+                
+                # 保留Delta近似值用于比较
+                delta_approximation = delta * 100
+                
+                # 计算精度提升
+                precision_improvement = {
+                    "exact_probability": assignment_probability,
+                    "delta_approximation": delta_approximation,
+                    "improvement_available": True,
+                    "calculation_method": "Black-Scholes精确计算"
+                }
+            else:
+                # 回退到Delta近似（向后兼容）
+                assignment_probability = delta * 100
+                assignment_risk_level = "中等" if 20 <= assignment_probability <= 40 else ("低" if assignment_probability < 20 else "高")
+                
+                precision_improvement = {
+                    "exact_probability": None,
+                    "delta_approximation": assignment_probability,
+                    "improvement_available": False,
+                    "calculation_method": "Delta近似（回退）",
+                    "error_reason": assignment_result.get("error_message", "计算失败")
+                }
+            
+            # 其他风险指标
             liquidity_score = self._calculate_liquidity_score(option)
             risk_score = self._calculate_risk_score(option, underlying_price)
             
@@ -247,11 +288,19 @@ class CoveredCallAnalyzer:
                 "historical_return": historical_return,
                 "historical_annualized": historical_annualized,
                 
-                # 风险指标
+                # 风险指标（增强版）
                 "assignment_probability": assignment_probability,
+                "assignment_risk_level": assignment_risk_level,
                 "liquidity_score": liquidity_score,
                 "risk_score": risk_score,
-                "composite_score": composite_score
+                "composite_score": composite_score,
+                
+                # 精度提升信息（新增）
+                "precision_improvement": precision_improvement,
+                
+                # 元数据
+                "calculation_timestamp": datetime.now().isoformat(),
+                "enhanced_calculation": True  # 标识使用了增强计算
             }
             
         except Exception as e:

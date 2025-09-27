@@ -434,10 +434,10 @@ class TestSummaryResponse:
         assert "error" in response
 
 
-@pytest.mark.asyncio
 class TestGetStockHistoryData:
     """Test the main stock history data retrieval function."""
     
+    @pytest.mark.asyncio
     @patch('src.stock.history_data.TradierClient')
     @patch('src.stock.history_data.save_to_csv')
     async def test_successful_data_retrieval(self, mock_save_csv, mock_tradier_client_class):
@@ -474,6 +474,7 @@ class TestGetStockHistoryData:
         assert "summary" in result
         assert "preview_records" in result
     
+    @pytest.mark.asyncio
     @patch('src.stock.history_data.TradierClient')
     async def test_no_data_found(self, mock_tradier_client_class):
         """Test handling when no historical data is found."""
@@ -489,6 +490,7 @@ class TestGetStockHistoryData:
                 tradier_client=mock_client
             )
     
+    @pytest.mark.asyncio
     @patch('src.stock.history_data.TradierClient')
     async def test_api_error_handling(self, mock_tradier_client_class):
         """Test API error handling."""

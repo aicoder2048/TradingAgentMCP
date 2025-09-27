@@ -32,6 +32,9 @@ packages = ["src/mcp_server"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests"
+]
 
 [dependency-groups]
 dev = [

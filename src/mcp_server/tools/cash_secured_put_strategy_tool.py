@@ -201,6 +201,7 @@ async def cash_secured_put_strategy_tool(
                 "status": "no_suitable_options",
                 "message": f"未找到符合{purpose_type}策略和{duration}期限要求的期权",
                 "details": {
+                    "purpose_type": purpose_type,
                     "current_price": underlying_price,
                     "checked_expiration": selected_expiration,
                     "delta_range": analyzer.delta_ranges[purpose_type],
@@ -300,6 +301,7 @@ async def cash_secured_put_strategy_tool(
                     rec["risk_metrics"]["assignment_probability"] for rec in recommendations.values()
                 ) / len(recommendations) if recommendations else 0
             },
+            "disclaimer": "本分析仅供参考，不构成投资建议。期权交易存在重大风险，可能导致资金损失。请在交易前充分了解相关风险，并根据自身财务状况谨慎决策。",
             "status": "success"
         }
         
@@ -320,7 +322,7 @@ async def cash_secured_put_strategy_tool(
             "error_details": {
                 "error_type": type(e).__name__,
                 "error_message": str(e),
-                "traceback": error_trace if settings.debug else None
+                "traceback": error_trace if settings.debug_mode else None
             },
             "analysis_timestamp": datetime.now().isoformat()
         }

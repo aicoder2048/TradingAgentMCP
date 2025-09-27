@@ -10,6 +10,7 @@ from src.mcp_server.tools.covered_call_strategy_tool import (
     format_strategy_summary
 )
 from src.provider.tradier.client import OptionContract, TradierQuote
+from src.option.option_expiration_selector import ExpirationSelectionResult
 
 
 class TestCoveredCallStrategyTool:
@@ -85,9 +86,11 @@ class TestCoveredCallStrategyTool:
         # Setup mock expiration selector
         mock_expiration = Mock()
         mock_expiration_class.return_value = mock_expiration
-        mock_expiration.get_optimal_expiration = AsyncMock(return_value=(
-            "2024-01-19",
-            {"days_to_expiry": 7, "option_type": "weekly", "selection_reason": "optimal"}
+        mock_expiration.get_optimal_expiration = AsyncMock(return_value=ExpirationSelectionResult(
+            selected_date="2024-01-19",
+            selection_reason="optimal weekly expiration",
+            metadata={"actual_days": 7, "expiration_type": "weekly"},
+            alternatives=[]
         ))
         
         # Setup mock analyzer
@@ -189,9 +192,11 @@ class TestCoveredCallStrategyTool:
         
         mock_expiration = Mock()
         mock_expiration_class.return_value = mock_expiration
-        mock_expiration.get_optimal_expiration = AsyncMock(return_value=(
-            "2024-01-19",
-            {"days_to_expiry": 7, "option_type": "weekly"}
+        mock_expiration.get_optimal_expiration = AsyncMock(return_value=ExpirationSelectionResult(
+            selected_date="2024-01-19",
+            selection_reason="weekly expiration",
+            metadata={"actual_days": 7, "expiration_type": "weekly"},
+            alternatives=[]
         ))
         
         mock_analyzer = Mock()
@@ -256,7 +261,12 @@ class TestCoveredCallStrategyTool:
             
             mock_expiration = Mock()
             mock_expiration_class.return_value = mock_expiration
-            mock_expiration.get_optimal_expiration = AsyncMock(return_value=("2024-02-16", {"days_to_expiry": 30, "option_type": "monthly"}))
+            mock_expiration.get_optimal_expiration = AsyncMock(return_value=ExpirationSelectionResult(
+                selected_date="2024-02-16",
+                selection_reason="monthly expiration",
+                metadata={"actual_days": 30, "expiration_type": "monthly"},
+                alternatives=[]
+            ))
             
             mock_analyzer = Mock()
             mock_analyzer_class.return_value = mock_analyzer
@@ -474,9 +484,11 @@ class TestCoveredCallIntegration:
                 
                 mock_exp_instance = Mock()
                 mock_exp.return_value = mock_exp_instance
-                mock_exp_instance.get_optimal_expiration = AsyncMock(return_value=(
-                    "2024-01-19",
-                    {"days_to_expiry": 14, "option_type": "weekly"}
+                mock_exp_instance.get_optimal_expiration = AsyncMock(return_value=ExpirationSelectionResult(
+                    selected_date="2024-01-19",
+                    selection_reason="weekly expiration",
+                    metadata={"actual_days": 14, "expiration_type": "weekly"},
+                    alternatives=[]
                 ))
                 
                 mock_export.return_value = "./data/cc_AAPL_integration_test.csv"

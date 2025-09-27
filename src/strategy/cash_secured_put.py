@@ -121,12 +121,15 @@ class CashSecuredPutAnalyzer:
                     continue
                 
                 # 资金限制检查
-                required_capital = option.strike * 100
-                if capital_limit and required_capital > capital_limit:
-                    continue
+                if hasattr(option, 'strike') and option.strike is not None:
+                    required_capital = option.strike * 100
+                    if capital_limit and required_capital > capital_limit:
+                        continue
+                else:
+                    continue  # 跳过没有strike信息的期权
                 
                 # 计算策略指标
-                metrics = await self.calculate_strategy_metrics(option, underlying_price)
+                metrics = self.calculate_strategy_metrics(option, underlying_price)
                 if metrics:
                     analyzed_options.append(metrics)
             
@@ -141,91 +144,188 @@ class CashSecuredPutAnalyzer:
             print(f"Error finding optimal strikes: {e}")
             return []
     
-    async def calculate_strategy_metrics(
-        self,
-        option: OptionContract,
-        underlying_price: float
-    ) -> Optional[Dict[str, Any]]:
+    def calculate_strategy_metrics(self, option: OptionContract, stock_price: float) -> Dict[str, Any]:
         """
-        计算CSP仓位的综合指标
+        计算CSP策略的详细指标
         
         Args:
-            option: 期权合约数据
-            underlying_price: 标的价格
+            option: 期权合约对象
+            stock_price: 当前股价
             
         Returns:
-            包含所有策略指标的字典
+            包含策略指标的字典
         """
         try:
-            # 基础数据
+            # 基础数据提取
+            if not hasattr(option, 'strike') or option.strike is None:
+                return {
+                    "error": "期权合约缺少行权价信息",
+                    "strike_price": 0,
+                    "current_price": stock_price,
+                    "enhanced_calculation": False
+                }
+            
             strike = option.strike
-            bid = option.bid or 0
-            ask = option.ask or 0
+            premium = (option.bid + option.ask) / 2 if option.bid and option.ask else 0
+            delta = option.greeks.get('delta', 0) if option.greeks else 0
             
-            if bid <= 0 or ask <= 0:
-                return None
-                
-            mid_price = (bid + ask) / 2
-            bid_ask_spread = ask - bid
-            
-            # 希腊字母
-            greeks = option.greeks or {}
-            delta = greeks.get("delta", 0)
-            theta = greeks.get("theta", 0)
-            implied_vol = greeks.get("mid_iv", 0)
-            
-            # 计算到期天数
-            exp_date = datetime.strptime(option.expiration_date, "%Y-%m-%d").date()
-            today = datetime.now().date()
-            days_to_expiry = max((exp_date - today).days, 1)
-            time_to_expiry = days_to_expiry / 365.0
-            
-            # P&L指标
-            max_profit = mid_price * 100
-            breakeven_price = strike - mid_price
-            required_capital = strike * 100
-            return_on_capital = (mid_price / strike) * 100
-            annualized_return = return_on_capital * (365 / days_to_expiry)
+            # 计算基础指标
+            capital_required = strike * 100  # 现金保障金额
+            max_profit = premium * 100  # 最大收益（权利金）
+            breakeven = strike - premium  # 盈亏平衡点
             
             # 风险指标
-            assignment_probability = abs(delta) * 100
-            liquidity_score = self._calculate_liquidity_score(option)
-            risk_score = self._calculate_risk_score(option, underlying_price)
+            max_loss = capital_required - max_profit  # 最大亏损
+            profit_margin = (max_profit / capital_required * 100) if capital_required > 0 else 0
             
-            # 综合评分
+            # 距离到期天数计算
+            from datetime import datetime, timedelta
+            try:
+                # 假设期权合约symbol包含到期日信息，或者使用默认值
+                days_to_expiry = 30  # 默认30天，实际应该从期权合约中解析
+                
+                # 如果期权对象有到期日信息
+                if hasattr(option, 'expiration_date') and option.expiration_date:
+                    if isinstance(option.expiration_date, str):
+                        exp_date = datetime.strptime(option.expiration_date, "%Y-%m-%d").date()
+                    else:
+                        exp_date = option.expiration_date
+                    today = datetime.now().date()
+                    days_to_expiry = max((exp_date - today).days, 1)
+            except:
+                days_to_expiry = 30  # 回退到默认值
+            
+            # 使用精确的Black-Scholes被行权概率计算
+            from src.option.assignment_probability import OptionAssignmentCalculator
+            
+            assignment_calculator = OptionAssignmentCalculator()
+            
+            # 获取隐含波动率
+            implied_volatility = option.greeks.get('mid_iv', 0.25) if option.greeks else 0.25  # 默认25%
+            
+            # 计算精确被行权概率
+            assignment_result = assignment_calculator.calculate_assignment_probability(
+                underlying_price=stock_price,
+                strike_price=strike,
+                time_to_expiry_days=days_to_expiry,
+                implied_volatility=implied_volatility,
+                option_type="put"
+            )
+            
+            if assignment_result["status"] == "success":
+                # 使用精确计算结果
+                assignment_probability = assignment_result["assignment_probability"] * 100  # 转换为百分比
+                assignment_risk_level = assignment_result["assignment_risk_level"]
+                
+                # 保留Delta近似值用于比较
+                delta_approximation = abs(delta) * 100
+                
+                # 计算精度提升
+                precision_improvement = {
+                    "exact_probability": assignment_probability,
+                    "delta_approximation": delta_approximation,
+                    "improvement_available": True,
+                    "calculation_method": "Black-Scholes精确计算"
+                }
+            else:
+                # 回退到Delta近似（向后兼容）
+                assignment_probability = abs(delta) * 100
+                assignment_risk_level = "中等" if 20 <= assignment_probability <= 40 else ("低" if assignment_probability < 20 else "高")
+                
+                precision_improvement = {
+                    "exact_probability": None,
+                    "delta_approximation": assignment_probability,
+                    "improvement_available": False,
+                    "calculation_method": "Delta近似（回退）",
+                    "error_reason": assignment_result.get("error_message", "计算失败")
+                }
+            
+            # 风险级别评估
+            if assignment_probability < 20:
+                risk_assessment = "低风险"
+                risk_color = "绿色"
+            elif assignment_probability < 40:
+                risk_assessment = "中等风险"
+                risk_color = "黄色"
+            else:
+                risk_assessment = "高风险"
+                risk_color = "红色"
+            
+            # 年化收益率计算
+            days_in_year = 365
+            annualized_return = (profit_margin * days_in_year / days_to_expiry) if days_to_expiry > 0 else 0
+            
+            # 计算流动性和风险评分
+            liquidity_score = self._calculate_liquidity_score(option)
+            risk_score = self._calculate_risk_score(option, stock_price)
+            
+            # 计算综合评分
             composite_score = self._calculate_composite_score(
-                annualized_return, liquidity_score, assignment_probability,
-                self.purpose_type
+                annualized_return=annualized_return,
+                liquidity_score=liquidity_score,
+                assignment_prob=assignment_probability,
+                purpose_type=self.purpose_type
             )
             
             return {
-                "symbol": option.symbol,
-                "strike": strike,
-                "expiration": option.expiration_date,
-                "days_to_expiry": days_to_expiry,
-                "delta": delta,
-                "premium": mid_price,
-                "bid": bid,
-                "ask": ask,
-                "bid_ask_spread": bid_ask_spread,
-                "open_interest": option.open_interest or 0,
-                "volume": option.volume or 0,
-                "implied_volatility": implied_vol,
-                "theta": theta,
+                # 基础指标
+                "strike_price": strike,
+                "current_price": stock_price,
+                "premium": premium,
+                "capital_required": capital_required,
                 "max_profit": max_profit,
-                "breakeven_price": breakeven_price,
-                "required_capital": required_capital,
-                "return_on_capital": return_on_capital,
-                "annualized_return": annualized_return,
-                "assignment_probability": assignment_probability,
-                "liquidity_score": liquidity_score,
-                "risk_score": risk_score,
-                "composite_score": composite_score
+                "max_loss": max_loss,
+                "breakeven": breakeven,
+                "profit_margin": round(profit_margin, 2),
+                "annualized_return": round(annualized_return, 2),
+                
+                # 兼容性字段（用于_build_recommendation）
+                "breakeven_price": breakeven,
+                "required_capital": capital_required,
+                "return_on_capital": round(profit_margin, 2),
+                "theta": option.greeks.get('theta', 0) if option.greeks else 0,
+                "implied_volatility": implied_volatility,
+                
+                # 期权合约信息（用于CSV导出等）
+                "symbol": getattr(option, 'symbol', 'N/A'),
+                "expiration": getattr(option, 'expiration_date', 'N/A'),
+                "bid": getattr(option, 'bid', 0),
+                "ask": getattr(option, 'ask', 0),
+                
+                # 风险指标（增强版）
+                "assignment_probability": round(assignment_probability, 2),
+                "assignment_risk_level": assignment_risk_level,
+                "risk_assessment": risk_assessment,
+                "risk_color": risk_color,
+                
+                # 希腊字母
+                "delta": delta,
+                "greeks": option.greeks if option.greeks else {},
+                
+                # 时间因子
+                "days_to_expiry": days_to_expiry,
+                
+                # 精度提升信息（新增）
+                "precision_improvement": precision_improvement,
+                
+                # 评分指标
+                "liquidity_score": round(liquidity_score, 2),
+                "risk_score": round(risk_score, 2),
+                "composite_score": round(composite_score, 2),
+                
+                # 元数据
+                "calculation_timestamp": datetime.now().isoformat(),
+                "enhanced_calculation": True  # 标识使用了增强计算
             }
             
         except Exception as e:
-            print(f"Error calculating strategy metrics: {e}")
-            return None
+            # 错误处理
+            return {
+                "error": f"计算策略指标时发生错误: {str(e)}",
+                "strike_price": option.strike if hasattr(option, 'strike') else 0,
+                "current_price": stock_price,
+                "enhanced_calculation": False
+            }
     
     def _is_valid_option(self, option: OptionContract) -> bool:
         """验证期权是否满足基本要求"""
@@ -263,6 +363,10 @@ class CashSecuredPutAnalyzer:
     def _calculate_risk_score(self, option: OptionContract, underlying_price: float) -> float:
         """计算风险评分 (0-100，100为最高风险)"""
         delta = abs(option.greeks.get("delta", 0)) if option.greeks else 0
+        
+        if not hasattr(option, 'strike') or option.strike is None:
+            return 50.0  # 返回中等风险分数作为默认值
+            
         strike = option.strike
         
         # 价内程度
@@ -401,7 +505,7 @@ class StrategyRecommendationEngine:
     ) -> Dict[str, Any]:
         """构建完整的推荐报告"""
         
-        strike = option["strike"]
+        strike = option["strike_price"]
         premium = option["premium"]
         
         return {
@@ -443,7 +547,7 @@ class StrategyRecommendationEngine:
             "aggressive": "激进型"
         }
         
-        strike = option["strike"]
+        strike = option["strike_price"]
         delta = option["delta"]
         annual_return = option["annualized_return"]
         assign_prob = option["assignment_probability"]
@@ -496,7 +600,7 @@ class ProfessionalOrderFormatter:
 ║ Action:        SELL TO OPEN                              ║
 ║ Quantity:      1 CONTRACT (100 SHARES)                   ║
 ║ Order Type:    LIMIT                                     ║
-║ Strike:        ${option['strike']:<6.2f}                             ║
+║ Strike:        ${option['strike_price']:<6.2f}                             ║
 ║ Expiration:    {exp_formatted:<43} ║
 ║ Limit Price:   ${option['premium']:<6.2f} (MID: ${option['bid']:.2f}-${option['ask']:.2f})              ║
 ╠══════════════════════════════════════════════════════════╣
@@ -567,7 +671,7 @@ async def export_csp_analysis_to_csv(
             writer.writerow({
                 'profile': profile,
                 'symbol': opt['symbol'],
-                'strike': opt['strike'],
+                'strike': opt['strike_price'],
                 'expiration': opt['expiration'],
                 'delta': opt['delta'],
                 'premium': opt['premium'],

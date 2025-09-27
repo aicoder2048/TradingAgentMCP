@@ -9,6 +9,7 @@ from .tools.get_stock_history_tool import get_stock_history_tool
 from .tools.get_options_chain_tool import options_chain_tool
 from .tools.cash_secured_put_strategy_tool import cash_secured_put_strategy_tool
 from .tools.covered_call_strategy_tool import covered_call_strategy_tool
+from .tools.option_assignment_probability_tool import option_assignment_probability_tool
 from .prompts.hello_prompt import call_hello_multiple
 from .config.settings import settings
 
@@ -229,6 +230,41 @@ def create_server() -> FastMCP:
             avg_cost=avg_cost,
             min_premium=min_premium,
             include_order_blocks=include_order_blocks
+        )
+
+    @mcp.tool()
+    async def option_assignment_probability_tool_mcp(
+        symbol: str,
+        strike_price: float,
+        expiration: str,
+        option_type: str = "put",
+        include_delta_comparison: bool = True,
+        risk_free_rate: float = None
+    ) -> Dict[str, Any]:
+        """
+        期权被行权概率计算专业工具。
+        
+        基于Black-Scholes模型提供精确的期权被行权概率计算，
+        替代简单的Delta近似方法，提供详细的风险分析和市场上下文。
+        
+        Args:
+            symbol: 股票代码 (必需) - 例如 "AAPL", "TSLA", "NVDA"
+            strike_price: 期权行权价格 (必需) - 例如 145.0
+            expiration: 到期日 YYYY-MM-DD 格式 (必需) - 例如 "2024-01-19"
+            option_type: 期权类型 - "put" 或 "call" (默认 "put")
+            include_delta_comparison: 是否包含Delta比较分析 (默认 True)
+            risk_free_rate: 无风险利率 (可选，默认 4.8%)
+            
+        Returns:
+            包含精确被行权概率、风险分析、Delta比较和市场上下文的完整分析
+        """
+        return await option_assignment_probability_tool(
+            symbol=symbol,
+            strike_price=strike_price,
+            expiration=expiration,
+            option_type=option_type,
+            include_delta_comparison=include_delta_comparison,
+            risk_free_rate=risk_free_rate
         )
 
     @mcp.prompt()
