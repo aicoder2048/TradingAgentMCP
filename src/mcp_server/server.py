@@ -7,6 +7,7 @@ from .tools.stock_key_info_tool import get_stock_key_info
 from .tools.get_earnings_calendar_tool import get_earnings_calendar_tool
 from .tools.get_stock_history_tool import get_stock_history_tool
 from .tools.get_options_chain_tool import options_chain_tool
+from .tools.cash_secured_put_strategy_tool import cash_secured_put_strategy_tool
 from .prompts.hello_prompt import call_hello_multiple
 from .config.settings import settings
 
@@ -151,6 +152,44 @@ def create_server() -> FastMCP:
             expiration=expiration,
             option_type=option_type,
             include_greeks=include_greeks
+        )
+
+    @mcp.tool()
+    async def cash_secured_put_strategy_tool_mcp(
+        symbol: str,
+        purpose_type: str = "income",
+        duration: str = "1w",
+        capital_limit: float = None,
+        include_order_blocks: bool = True,
+        min_premium: float = None,
+        max_delta: float = None
+    ) -> Dict[str, Any]:
+        """
+        现金保障看跌期权策略分析工具。
+        
+        分析期权链并生成基于Delta的现金保障看跌策略建议，支持收入和折扣购买双重目的。
+        提供三种风险级别的专业建议和JP Morgan风格的交易订单块。
+        
+        Args:
+            symbol: 股票代码 (必需) - 例如 "AAPL", "TSLA", "NVDA"
+            purpose_type: 策略目的 - "income" (收入导向) 或 "discount" (折扣购买) (默认 "income")
+            duration: 时间周期 - "1w", "2w", "1m", "3m", "6m", "1y" (默认 "1w")
+            capital_limit: 资金限制 (可选) - 最大可用资金金额
+            include_order_blocks: 是否包含专业订单块 (默认 True)
+            min_premium: 最低权利金要求 (可选)
+            max_delta: 最大Delta限制 (可选)
+            
+        Returns:
+            包含策略分析、建议和订单块的完整结果
+        """
+        return await cash_secured_put_strategy_tool(
+            symbol=symbol,
+            purpose_type=purpose_type,
+            duration=duration,
+            capital_limit=capital_limit,
+            include_order_blocks=include_order_blocks,
+            min_premium=min_premium,
+            max_delta=max_delta
         )
 
     @mcp.prompt()

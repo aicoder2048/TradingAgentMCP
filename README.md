@@ -11,6 +11,9 @@
 - **📊 实时市场数据**: 通过 Tradier API 提供实时股票信息和市场时间
 - **🕐 交易时段跟踪**: 准确获取美股市场开盘状态和交易时段信息
 - **📈 综合股票分析**: 详细的股票关键信息，包括价格、成交量、估值指标和技术指标
+- **🎯 现金保障看跌策略**: 专业级期权策略分析，支持收入和折扣购买双重目的 🆕
+- **🧠 智能期权筛选**: 基于Delta的期权选择、风险评估和专业订单格式化 🆕
+- **⚖️ 三级风险建议**: 保守、平衡、激进三种风险级别的投资建议 🆕
 - **🔧 环境配置**: 基于环境变量的灵活配置，支持沙盒和生产环境
 - **🧩 模块化架构**: 工具、提示和配置的清晰分离
 - **🧪 测试就绪**: 内置 pytest 测试框架
@@ -109,6 +112,18 @@ python main.py
 │   │   ├── __init__.py
 │   │   ├── info.py         # 股票信息处理器  
 │   │   └── history_data.py # 历史数据和技术分析 🆕
+│   ├── option/              # 期权分析模块 🆕
+│   │   ├── __init__.py
+│   │   ├── option_expiration_selector.py # 智能期权到期日选择 🆕
+│   │   ├── greeks_enhanced.py # 增强希腊字母计算 🆕
+│   │   ├── options_chain.py  # 期权链处理
+│   │   ├── option_strikes.py # 期权行权价管理
+│   │   └── option_expiration_dates.py # 期权到期日处理
+│   ├── strategy/            # 交易策略模块 🆕
+│   │   ├── __init__.py
+│   │   ├── cash_secured_put.py # 现金保障看跌策略分析器 🆕
+│   │   ├── strategy_analyzer.py # Delta基础行权价选择器 🆕
+│   │   └── risk_calculator.py # 期权风险计算器 🆕
 │   ├── utils/               # 通用工具
 │   │   ├── __init__.py
 │   │   └── time.py         # 时间处理工具
@@ -127,7 +142,8 @@ python main.py
 │       │   ├── get_market_time_tool.py # 市场时间工具
 │       │   ├── stock_key_info_tool.py  # 股票信息工具
 │       │   ├── get_earnings_calendar_tool.py # 财报日历工具 🆕
-│       │   └── get_stock_history_tool.py # 历史数据工具 🆕
+│       │   ├── get_stock_history_tool.py # 历史数据工具 🆕
+│       │   └── cash_secured_put_strategy_tool.py # 现金保障看跌策略工具 🆕
 │       └── prompts/
 │           ├── __init__.py
 │           └── hello_prompt.py # 示例提示实现
@@ -149,7 +165,8 @@ python main.py
 ├── specs/
 │   ├── prd_v0_ai_enhanced.md  # Product requirements document
 │   ├── prd_v3_ai_enhanced.md  # 财报日历 PRD 🆕
-│   └── prd_v4_ai_enhanced.md  # 历史数据 PRD 🆕
+│   ├── prd_v4_ai_enhanced.md  # 历史数据 PRD 🆕
+│   └── prd_v6_ai_enhanced.md  # 现金保障看跌策略 PRD 🆕
 └── ai_docs/                    # Reference documentation
 ```
 
@@ -265,6 +282,26 @@ uv run pytest tests/tools/test_hello_tool.py
     - 自动保存 CSV 文件到 `./data` 目录
     - 上下文优化 (仅返回摘要 + 前30条记录)
 
+- **cash_secured_put_strategy_tool_mcp**: 现金保障看跌期权策略分析工具 🆕
+  - 输入:
+    - `symbol` (必需: 股票代码，如 "AAPL", "TSLA", "NVDA")
+    - `purpose_type` (可选: "income" 收入导向 或 "discount" 折扣购买, 默认 "income")
+    - `duration` (可选: "1w", "2w", "1m", "3m", "6m", "1y", 默认 "1w")
+    - `capital_limit` (可选: 最大可用资金金额)
+    - `include_order_blocks` (可选: 是否包含专业订单块, 默认 true)
+    - `min_premium` (可选: 最低权利金要求)
+    - `max_delta` (可选: 最大Delta限制)
+  - 返回: 
+    - 三级风险建议 (保守、平衡、激进)
+    - JP Morgan风格的专业订单块
+    - 完整的风险分析和P&L场景
+    - CSV数据导出
+  - 特色:
+    - 基于Delta的智能期权筛选 (收入: 10-30%, 折扣: 30-70%)
+    - 智能期权到期日选择 (优先周期权/月期权)
+    - 专业级风险评估和分配概率计算
+    - 机构级订单格式化 (类似JP Morgan交易台风格)
+
 - **hello**: 简单的问候工具（演示用）
   - 输入: `name` (字符串)
   - 返回: 结构化的问候响应
@@ -299,8 +336,13 @@ uv run pytest tests/tools/test_hello_tool.py
 使用 stock_history_tool 获取 AAPL 指定日期范围的数据 (start_date="2023-01-01", end_date="2023-12-31")
 使用 stock_history_tool 获取 NVDA 过去1年的周线数据 (date_range="1y", interval="weekly")
 
+# 现金保障看跌期权策略分析 🆕
+使用 cash_secured_put_strategy_tool_mcp 分析 AAPL 的收入导向策略 (purpose_type="income", duration="1w")
+使用 cash_secured_put_strategy_tool_mcp 分析 TSLA 的折扣购买策略 (purpose_type="discount", duration="1m", capital_limit=50000)
+使用 cash_secured_put_strategy_tool_mcp 获取 NVDA 的保守策略建议 (duration="2w", max_delta=-0.20, min_premium=2.0)
+
 # 分析多个股票  
-同时获取 AAPL、NVDA、MSFT 的股票数据、财报时间和历史趋势进行投资分析
+同时获取 AAPL、NVDA、MSFT 的股票数据、财报时间、历史趋势和期权策略进行综合投资分析
 ```
 
 ## 🚦 Development Workflow
@@ -331,12 +373,23 @@ TradingAgent MCP 提供了一个强大的框架，可以轻松扩展更多交易
 - **实时市场数据**: 通过 Tradier API 获取实时股票信息
 - **市场时间跟踪**: 准确的美股交易时段状态
 - **股票综合分析**: 价格、成交量、估值和技术指标
+- **财报日历分析**: 智能财报事件跟踪和日期预测
+- **历史数据分析**: 全套技术指标和趋势分析
+- **现金保障看跌策略**: 专业级期权策略分析和风险评估 🆕
+
+### 当前期权功能 🆕
+
+1. **期权链分析**: ITM/ATM/OTM 智能分类和流动性评估
+2. **希腊字母计算**: Delta、Gamma、Theta、Vega 和隐含波动率
+3. **期权到期日选择**: 智能周期权/月期权选择算法
+4. **现金保障看跌策略**: 收入导向和折扣购买双重策略
+5. **风险管理**: 三级风险建议和专业订单格式化
 
 ### 可扩展功能
 
-1. **期权数据**: 期权链、隐含波动率、希腊字母
-2. **技术分析**: 更多技术指标、图表模式识别
-3. **基本面分析**: 财务报表、估值模型
+1. **更多期权策略**: 铁鹰式、日历价差、跨式套利等
+2. **组合期权策略**: 多腿期权组合分析和优化
+3. **波动率分析**: 隐含波动率曲面和波动率套利
 4. **组合管理**: 投资组合跟踪、风险分析
 5. **交易执行**: 下单、订单管理（需要相应授权）
 

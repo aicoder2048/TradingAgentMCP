@@ -652,3 +652,333 @@ class TradierClient:
             option_contracts.append(contract)
         
         return option_contracts
+    
+    # ==================== CSP Strategy Enhancement Methods ====================
+    
+    def get_options_by_delta_range(
+        self,
+        symbol: str,
+        expiration: str,
+        option_type: str,
+        delta_min: float,
+        delta_max: float
+    ) -> List[OptionContract]:
+        """
+        获取指定Delta范围内的期权合约。
+        专为CSP策略选择优化。
+        
+        Args:
+            symbol: 股票代码
+            expiration: 到期日 (YYYY-MM-DD)
+            option_type: 期权类型 ("call" 或 "put")
+            delta_min: 最小Delta值
+            delta_max: 最大Delta值
+            
+        Returns:
+            符合Delta范围的期权合约列表
+        """
+        # 获取完整期权链
+        all_options = self.get_option_chain_enhanced(symbol, expiration, include_greeks=True)
+        
+        # 过滤指定类型和Delta范围的期权
+        filtered_options = []
+        for option in all_options:
+            if option.option_type != option_type:
+                continue
+                
+            if not option.greeks:
+                continue
+                
+            delta = option.greeks.get("delta", 0)
+            if delta_min <= delta <= delta_max:
+                filtered_options.append(option)
+        
+        # 按Delta值排序
+        filtered_options.sort(key=lambda x: x.greeks.get("delta", 0))
+        return filtered_options
+    
+    def get_next_expiration_by_duration(
+        self,
+        symbol: str,
+        duration: str  # "1w", "2w", "1m", "3m", "6m", "1y"
+    ) -> Optional[str]:
+        """
+        根据持续时间获取下一个合适的到期日。
+        处理周度/月度期权和交易日计算。
+        
+        Args:
+            symbol: 股票代码
+            duration: 持续时间 ("1w", "2w", "1m", "3m", "6m", "1y")
+            
+        Returns:
+            最适合的到期日 (YYYY-MM-DD) 或 None
+        """
+        from datetime import datetime, timedelta
+        import calendar
+        
+        # 持续时间映射到天数范围
+        duration_mappings = {
+            "1w": {"min_days": 5, "max_days": 9, "preferred": "weekly"},
+            "2w": {"min_days": 10, "max_days": 18, "preferred": "weekly"},
+            "1m": {"min_days": 25, "max_days": 35, "preferred": "monthly"},
+            "3m": {"min_days": 80, "max_days": 100, "preferred": "monthly"},
+            "6m": {"min_days": 170, "max_days": 190, "preferred": "monthly"},
+            "1y": {"min_days": 350, "max_days": 380, "preferred": "leaps"}
+        }
+        
+        if duration not in duration_mappings:
+            raise ValueError(f"Unsupported duration: {duration}")
+        
+        mapping = duration_mappings[duration]
+        min_days = mapping["min_days"]
+        max_days = mapping["max_days"]
+        preferred_type = mapping["preferred"]
+        
+        # 获取所有可用到期日
+        expirations = self.get_option_expirations(symbol, include_all_roots=True)
+        
+        today = datetime.now().date()
+        candidates = []
+        
+        for exp in expirations:
+            exp_date = datetime.strptime(exp.date, "%Y-%m-%d").date()
+            days_to_exp = (exp_date - today).days
+            
+            if min_days <= days_to_exp <= max_days:
+                # 判断是否为周度期权 (周五到期)
+                is_weekly = exp_date.weekday() == 4  # 周五
+                
+                # 判断是否为月度期权 (第三个周五)
+                third_friday = self._get_third_friday(exp_date.year, exp_date.month)
+                is_monthly = exp_date == third_friday
+                
+                candidates.append({
+                    "date": exp.date,
+                    "days_to_exp": days_to_exp,
+                    "is_weekly": is_weekly,
+                    "is_monthly": is_monthly,
+                    "exp_type": exp.expiration_type
+                })
+        
+        if not candidates:
+            return None
+        
+        # 根据偏好选择最佳到期日
+        if preferred_type == "weekly":
+            # 优先选择周度期权
+            weekly_options = [c for c in candidates if c["is_weekly"]]
+            if weekly_options:
+                # 选择最接近中位天数的
+                target_days = (min_days + max_days) / 2
+                best = min(weekly_options, key=lambda x: abs(x["days_to_exp"] - target_days))
+                return best["date"]
+        
+        elif preferred_type == "monthly":
+            # 优先选择月度期权
+            monthly_options = [c for c in candidates if c["is_monthly"]]
+            if monthly_options:
+                # 选择最接近中位天数的
+                target_days = (min_days + max_days) / 2
+                best = min(monthly_options, key=lambda x: abs(x["days_to_exp"] - target_days))
+                return best["date"]
+        
+        # 如果没有找到偏好类型，选择最接近中位天数的
+        target_days = (min_days + max_days) / 2
+        best = min(candidates, key=lambda x: abs(x["days_to_exp"] - target_days))
+        return best["date"]
+    
+    def calculate_implied_volatility_surface(
+        self,
+        symbol: str,
+        expiration_dates: List[str]
+    ) -> Dict[str, Dict[float, float]]:
+        """
+        构建隐含波动率曲面用于波动率分析。
+        
+        Args:
+            symbol: 股票代码
+            expiration_dates: 到期日列表
+            
+        Returns:
+            波动率曲面字典 {expiration: {strike: iv}}
+        """
+        iv_surface = {}
+        
+        for expiration in expiration_dates:
+            try:
+                options = self.get_option_chain_enhanced(symbol, expiration, include_greeks=True)
+                
+                # 按执行价组织隐含波动率数据
+                strikes_iv = {}
+                for option in options:
+                    if not option.greeks or not option.strike:
+                        continue
+                    
+                    iv = option.greeks.get("mid_iv")
+                    if iv and iv > 0:
+                        strikes_iv[option.strike] = iv
+                
+                if strikes_iv:
+                    iv_surface[expiration] = strikes_iv
+                    
+            except Exception as e:
+                print(f"Error getting IV data for {expiration}: {e}")
+                continue
+        
+        return iv_surface
+    
+    def get_atm_implied_volatility(self, symbol: str) -> Optional[float]:
+        """
+        获取最近到期的平值期权隐含波动率。
+        
+        Args:
+            symbol: 股票代码
+            
+        Returns:
+            平值隐含波动率或None
+        """
+        try:
+            # 获取当前股价
+            quotes = self.get_quotes([symbol])
+            if not quotes:
+                return None
+            
+            current_price = quotes[0].last
+            if not current_price:
+                return None
+            
+            # 获取最近的到期日
+            expirations = self.get_option_expirations(symbol)
+            if not expirations:
+                return None
+            
+            # 选择最近的到期日（但不是今天）
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            min_exp = today + timedelta(days=1)
+            
+            valid_expirations = [
+                exp for exp in expirations
+                if datetime.strptime(exp.date, "%Y-%m-%d").date() >= min_exp
+            ]
+            
+            if not valid_expirations:
+                return None
+            
+            # 按日期排序，选择最近的
+            valid_expirations.sort(key=lambda x: x.date)
+            nearest_exp = valid_expirations[0].date
+            
+            # 获取该到期日的期权链
+            options = self.get_option_chain_enhanced(symbol, nearest_exp, include_greeks=True)
+            
+            # 找到最接近平值的期权
+            closest_strike = None
+            min_distance = float('inf')
+            
+            for option in options:
+                if not option.strike or not option.greeks:
+                    continue
+                
+                distance = abs(option.strike - current_price)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_strike = option.strike
+            
+            if not closest_strike:
+                return None
+            
+            # 获取该执行价的平均隐含波动率
+            call_iv = None
+            put_iv = None
+            
+            for option in options:
+                if option.strike == closest_strike and option.greeks:
+                    iv = option.greeks.get("mid_iv")
+                    if iv and iv > 0:
+                        if option.option_type == "call":
+                            call_iv = iv
+                        elif option.option_type == "put":
+                            put_iv = iv
+            
+            # 返回Call和Put的平均隐含波动率
+            if call_iv and put_iv:
+                return (call_iv + put_iv) / 2
+            elif call_iv:
+                return call_iv
+            elif put_iv:
+                return put_iv
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error getting ATM IV for {symbol}: {e}")
+            return None
+    
+    def get_option_liquidity_metrics(
+        self,
+        symbol: str,
+        expiration: str
+    ) -> Dict[str, Any]:
+        """
+        获取期权流动性指标。
+        
+        Args:
+            symbol: 股票代码
+            expiration: 到期日
+            
+        Returns:
+            流动性指标字典
+        """
+        options = self.get_option_chain_enhanced(symbol, expiration, include_greeks=True)
+        
+        total_volume = 0
+        total_oi = 0
+        valid_options = 0
+        spreads = []
+        
+        for option in options:
+            if option.bid and option.ask and option.bid > 0 and option.ask > 0:
+                valid_options += 1
+                spread_pct = (option.ask - option.bid) / ((option.ask + option.bid) / 2)
+                spreads.append(spread_pct)
+                
+                if option.volume:
+                    total_volume += option.volume
+                if option.open_interest:
+                    total_oi += option.open_interest
+        
+        avg_spread = sum(spreads) / len(spreads) if spreads else 0
+        
+        return {
+            "total_volume": total_volume,
+            "total_open_interest": total_oi,
+            "valid_options_count": valid_options,
+            "average_bid_ask_spread": avg_spread,
+            "liquidity_score": min(100, (total_volume / 100 + total_oi / 1000) * 10)  # 简化评分
+        }
+    
+    def _get_third_friday(self, year: int, month: int) -> 'datetime.date':
+        """获取指定年月的第三个周五（月度期权到期日）"""
+        import calendar
+        from datetime import date
+        
+        # 找到该月第一个周五
+        first_day = date(year, month, 1)
+        first_friday = first_day
+        while first_friday.weekday() != 4:  # 4 = Friday
+            first_friday = first_friday.replace(day=first_friday.day + 1)
+        
+        # 第三个周五
+        third_friday = first_friday.replace(day=first_friday.day + 14)
+        
+        # 确保没有超出该月
+        last_day = calendar.monthrange(year, month)[1]
+        if third_friday.day > last_day:
+            # 如果超出，返回倒数第一个周五
+            last_date = date(year, month, last_day)
+            while last_date.weekday() != 4:
+                last_date = last_date.replace(day=last_date.day - 1)
+            return last_date
+        
+        return third_friday
