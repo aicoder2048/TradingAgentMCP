@@ -8,6 +8,7 @@ from .tools.get_earnings_calendar_tool import get_earnings_calendar_tool
 from .tools.get_stock_history_tool import get_stock_history_tool
 from .tools.get_options_chain_tool import options_chain_tool
 from .tools.cash_secured_put_strategy_tool import cash_secured_put_strategy_tool
+from .tools.covered_call_strategy_tool import covered_call_strategy_tool
 from .prompts.hello_prompt import call_hello_multiple
 from .config.settings import settings
 
@@ -190,6 +191,44 @@ def create_server() -> FastMCP:
             include_order_blocks=include_order_blocks,
             min_premium=min_premium,
             max_delta=max_delta
+        )
+
+    @mcp.tool()
+    async def covered_call_strategy_tool_mcp(
+        symbol: str,
+        purpose_type: str = "income",
+        duration: str = "1w",
+        shares_owned: int = 100,
+        avg_cost: float = None,
+        min_premium: float = None,
+        include_order_blocks: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Covered Call策略分析工具。
+        
+        为持有股票的投资者提供专业的covered call期权策略分析，
+        生成收入导向和减仓导向的策略建议，包含风险评估和专业订单格式。
+        
+        Args:
+            symbol: 股票代码 (必需) - 例如 "AAPL", "TSLA", "NVDA"
+            purpose_type: 策略目的 - "income" (收入导向) 或 "exit" (减仓导向) (默认 "income")
+            duration: 时间周期 - "1w", "2w", "1m", "3m", "6m", "1y" (默认 "1w")
+            shares_owned: 持有股票数量 (必需，至少100股) (默认 100)
+            avg_cost: 每股平均成本基础 (可选，用于税务分析)
+            min_premium: 最低权利金门槛 (可选)
+            include_order_blocks: 是否包含专业订单块 (默认 True)
+            
+        Returns:
+            包含策略分析、三级风险建议和专业订单格式的完整结果
+        """
+        return await covered_call_strategy_tool(
+            symbol=symbol,
+            purpose_type=purpose_type,
+            duration=duration,
+            shares_owned=shares_owned,
+            avg_cost=avg_cost,
+            min_premium=min_premium,
+            include_order_blocks=include_order_blocks
         )
 
     @mcp.prompt()

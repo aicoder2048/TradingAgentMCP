@@ -982,3 +982,223 @@ class TradierClient:
             return last_date
         
         return third_friday
+
+    # === Covered Call Strategy Methods ===
+    
+    def get_call_options_by_delta_range(
+        self,
+        symbol: str,
+        expiration: str,
+        delta_min: float,
+        delta_max: float
+    ) -> List[OptionContract]:
+        """
+        获取指定Delta范围内的call期权，专为covered call策略优化。
+        
+        Args:
+            symbol: 股票代码
+            expiration: 到期日 (YYYY-MM-DD)
+            delta_min: 最小Delta值 (正值，如0.10)
+            delta_max: 最大Delta值 (正值，如0.30)
+            
+        Returns:
+            符合Delta范围的call期权合约列表，按Delta排序
+        """
+        return self.get_options_by_delta_range(
+            symbol=symbol,
+            expiration=expiration,
+            option_type="call",
+            delta_min=delta_min,
+            delta_max=delta_max
+        )
+    
+    def calculate_resistance_levels(
+        self,
+        symbol: str,
+        lookback_days: int = 60
+    ) -> Dict[str, float]:
+        """
+        计算技术阻力位，用于covered call行权价选择。
+        
+        Args:
+            symbol: 股票代码
+            lookback_days: 回望天数
+            
+        Returns:
+            阻力位字典 {"resistance_1": price, "resistance_2": price, ...}
+        """
+        try:
+            from datetime import datetime, timedelta
+            import numpy as np
+            
+            # 获取历史数据
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            start_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+            
+            historical = self.get_historical_data(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                interval="daily"
+            )
+            
+            if not historical:
+                return {}
+            
+            # 提取高点数据
+            highs = [float(bar.high) for bar in historical]
+            lows = [float(bar.low) for bar in historical]
+            closes = [float(bar.close) for bar in historical]
+            
+            # 计算不同级别的阻力位
+            resistance_levels = {}
+            
+            # 最近20天高点
+            if len(highs) >= 20:
+                resistance_levels["resistance_20d"] = max(highs[-20:])
+            
+            # 最近60天高点
+            resistance_levels["resistance_60d"] = max(highs)
+            
+            # 简单移动平均线阻力位
+            if len(closes) >= 50:
+                sma_50 = sum(closes[-50:]) / 50
+                current_price = closes[-1]
+                if sma_50 > current_price:
+                    resistance_levels["sma_50_resistance"] = sma_50
+            
+            # 心理阻力位（整数位）
+            current_price = closes[-1]
+            next_round_number = (int(current_price / 5) + 1) * 5  # 下一个5的倍数
+            resistance_levels["psychological_resistance"] = float(next_round_number)
+            
+            # 前期高点阻力位（局部高点）
+            if len(highs) >= 10:
+                local_highs = []
+                for i in range(5, len(highs) - 5):
+                    if highs[i] == max(highs[i-5:i+6]):
+                        local_highs.append(highs[i])
+                
+                if local_highs:
+                    # 选择最近的显著高点
+                    significant_high = max(local_highs[-3:]) if len(local_highs) >= 3 else max(local_highs)
+                    if significant_high > current_price:
+                        resistance_levels["prior_high_resistance"] = significant_high
+            
+            return resistance_levels
+            
+        except Exception as e:
+            # 如果技术分析失败，返回基本阻力位
+            try:
+                current_price = self.get_quotes([symbol])[0].last
+                return {
+                    "psychological_resistance": float((int(current_price / 5) + 1) * 5)
+                }
+            except:
+                return {}
+    
+    def get_stock_position_info(
+        self,
+        symbol: str
+    ) -> Dict[str, Any]:
+        """
+        获取股票持仓信息框架。
+        
+        注意：Tradier API不直接提供持仓信息，此方法提供数据结构框架。
+        实际使用时需要从其他数据源获取持仓信息。
+        
+        Args:
+            symbol: 股票代码
+            
+        Returns:
+            持仓信息字典
+        """
+        try:
+            # 获取当前股价
+            quote = self.get_quotes([symbol])[0]
+            current_price = quote.last
+            
+            return {
+                "symbol": symbol,
+                "current_price": current_price,
+                "shares_owned": None,  # 需要外部提供
+                "avg_cost": None,      # 需要外部提供
+                "market_value": None,  # 需要外部计算
+                "unrealized_pnl": None,  # 需要外部计算
+                "position_data_source": "external_required",
+                "note": "持仓数据需要用户提供或从其他API获取"
+            }
+            
+        except Exception as e:
+            return {
+                "symbol": symbol,
+                "error": f"无法获取股票信息: {str(e)}",
+                "position_data_source": "external_required"
+            }
+    
+    def get_covered_call_analysis_data(
+        self,
+        symbol: str,
+        expiration: str,
+        shares_owned: int,
+        purpose_type: str = "income"
+    ) -> Dict[str, Any]:
+        """
+        获取covered call策略分析所需的综合数据。
+        
+        Args:
+            symbol: 股票代码
+            expiration: 期权到期日
+            shares_owned: 持有股票数量
+            purpose_type: 策略类型 ("income" 或 "exit")
+            
+        Returns:
+            包含股价、期权链、阻力位等综合数据
+        """
+        try:
+            # 定义Delta范围
+            delta_ranges = {
+                "income": {"min": 0.10, "max": 0.30},
+                "exit": {"min": 0.30, "max": 0.70}
+            }
+            
+            delta_range = delta_ranges.get(purpose_type, delta_ranges["income"])
+            
+            # 获取基础数据
+            quote = self.get_quotes([symbol])[0]
+            current_price = quote.last
+            
+            # 获取call期权
+            call_options = self.get_call_options_by_delta_range(
+                symbol=symbol,
+                expiration=expiration,
+                delta_min=delta_range["min"],
+                delta_max=delta_range["max"]
+            )
+            
+            # 获取阻力位
+            resistance_levels = self.calculate_resistance_levels(symbol)
+            
+            # 计算可写合约数
+            contracts_available = shares_owned // 100
+            
+            return {
+                "symbol": symbol,
+                "current_price": current_price,
+                "expiration": expiration,
+                "shares_owned": shares_owned,
+                "contracts_available": contracts_available,
+                "call_options": call_options,
+                "resistance_levels": resistance_levels,
+                "delta_range_used": delta_range,
+                "purpose_type": purpose_type,
+                "market_data_timestamp": quote.last_volume_timestamp if hasattr(quote, 'last_volume_timestamp') else None
+            }
+            
+        except Exception as e:
+            return {
+                "symbol": symbol,
+                "error": f"获取covered call分析数据失败: {str(e)}",
+                "shares_owned": shares_owned,
+                "purpose_type": purpose_type
+            }
