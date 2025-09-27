@@ -1,6 +1,6 @@
 from fastmcp import FastMCP
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import Dict, Any, List, Union
 from .tools.hello_tool import hello
 from .tools.get_market_time_tool import get_market_time_status
 from .tools.stock_key_info_tool import get_stock_key_info
@@ -11,6 +11,7 @@ from .tools.cash_secured_put_strategy_tool import cash_secured_put_strategy_tool
 from .tools.covered_call_strategy_tool import covered_call_strategy_tool
 from .tools.option_assignment_probability_tool import option_assignment_probability_tool
 from .prompts.hello_prompt import call_hello_multiple
+from .prompts.income_generation_csp_prompt import income_generation_csp_engine
 from .config.settings import settings
 
 @asynccontextmanager
@@ -280,5 +281,50 @@ def create_server() -> FastMCP:
             A formatted prompt string
         """
         return await call_hello_multiple(name, times)
+
+    @mcp.prompt()
+    async def income_generation_csp_engine_prompt(
+        tickers: Union[List[str], str],
+        cash_usd: float,
+        min_days: int = 7,
+        max_days: int = 28,
+        target_apy_pct: float = 50,
+        min_winrate_pct: float = 70,
+        confidence_pct: float = 90,
+    ) -> str:
+        """
+        Generate income-focused Cash-Secured Put strategy execution prompt.
+
+        Creates a comprehensive execution plan for high-yield, low-assignment-risk 
+        options strategies optimized for premium collection rather than stock acquisition.
+        Targets ≥50% annualized returns with Delta range 0.10-0.30.
+
+        Args:
+            tickers: Target symbols - supports multiple formats:
+                - List: ["TSLA", "GOOG", "META"]  
+                - String (space): "TSLA GOOG META"
+                - String (comma): "TSLA,GOOG,META"
+                - Single ticker: "TSLA"
+                (default: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"])
+            cash_usd: Available capital for strategies
+            min_days: Minimum days to expiration (default: 7)
+            max_days: Maximum days to expiration (default: 28)
+            target_apy_pct: Target annualized percentage yield (default: 50%)
+            min_winrate_pct: Minimum target win rate (default: 70%)
+            confidence_pct: Statistical confidence level (default: 90%)
+
+        Returns:
+            Comprehensive execution prompt string with tool call sequences,
+            screening criteria, and professional risk management protocols
+        """
+        return await income_generation_csp_engine(
+            tickers=tickers,
+            cash_usd=cash_usd,
+            min_days=min_days,
+            max_days=max_days,
+            target_apy_pct=target_apy_pct,
+            min_winrate_pct=min_winrate_pct,
+            confidence_pct=confidence_pct
+        )
 
     return mcp
