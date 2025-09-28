@@ -18,7 +18,7 @@ import ast
 
 
 async def income_generation_csp_engine(
-    tickers: Union[List[str], str],
+    tickers: str,  # 修改：现在只接受字符串，内部处理所有格式
     cash_usd: float,
     min_days: int = 7,
     max_days: int = 28,
@@ -30,7 +30,12 @@ async def income_generation_csp_engine(
     生成收入导向的现金担保看跌期权策略执行提示
     
     Args:
-        tickers: 目标股票代码列表 (默认: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"])
+        tickers: 目标股票代码字符串 - 支持多种格式:
+            - JSON字符串: "[\"TSLA\", \"GOOG\", \"META\"]" 或 "['TSLA','GOOG','META']"  
+            - 空格分隔: "TSLA GOOG META"
+            - 逗号分隔: "TSLA,GOOG,META"
+            - 单个ticker: "TSLA"
+            (默认: [\"SPY\", \"QQQ\", \"AAPL\", \"MSFT\", \"NVDA\"])
         cash_usd: 可用资金
         min_days: 最小到期天数 (默认: 7)
         max_days: 最大到期天数 (默认: 28)
@@ -45,20 +50,44 @@ async def income_generation_csp_engine(
         ValueError: 当输入参数无效时
     """
     
-    # 首先处理和清理输入的tickers
-    tickers = _parse_tickers_input(tickers)
+    # DEBUG: 记录函数入口的原始参数
+    try:
+        from ..utils.debug_logger import debug_param, debug_parse_result
+        debug_param(
+            "income_generation_csp_engine:ENTRY",
+            "tickers_raw",
+            tickers,
+            f"Type: {type(tickers).__name__}, ID: {id(tickers)}"
+        )
+    except:
+        pass
     
-    if tickers:
+    # 首先处理和清理输入的tickers
+    tickers_list = _parse_tickers_input(tickers)
+    
+    # DEBUG: 记录解析后的结果
+    try:
+        debug_parse_result(tickers, tickers_list)
+        debug_param(
+            "income_generation_csp_engine:AFTER_PARSE",
+            "tickers_parsed",
+            tickers_list,
+            f"Length: {len(tickers_list) if tickers_list else 0}"
+        )
+    except:
+        pass
+    
+    if tickers_list:
         # 清理每个ticker的空格并去除空字符串
-        tickers = [ticker.strip() for ticker in tickers if ticker and ticker.strip()]
+        tickers_list = [ticker.strip() for ticker in tickers_list if ticker and ticker.strip()]
     
     # 处理默认股票列表
-    if not tickers:
-        tickers = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"]
+    if not tickers_list:
+        tickers_list = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"]
     
     # 参数验证（在清理后进行）
     validation_result = _validate_parameters(
-        tickers, cash_usd, min_days, max_days, 
+        tickers_list, cash_usd, min_days, max_days, 
         target_apy_pct, min_winrate_pct, confidence_pct
     )
     
@@ -66,16 +95,16 @@ async def income_generation_csp_engine(
         raise ValueError(f"参数验证失败: {', '.join(validation_result['errors'])}")
     
     # 限制股票数量以优化性能
-    if len(tickers) > 10:
-        tickers = tickers[:10]
+    if len(tickers_list) > 10:
+        tickers_list = tickers_list[:10]
     
     # 构建股票字符串
-    tickers_str = ", ".join(tickers)
-    primary_ticker = tickers[0]
+    tickers_str = ", ".join(tickers_list)
+    primary_ticker = tickers_list[0]
     
     # 生成结构化提示
     prompt = _generate_structured_prompt(
-        tickers=tickers,
+        tickers=tickers_list,
         tickers_str=tickers_str,
         primary_ticker=primary_ticker,
         cash_usd=cash_usd,
@@ -410,51 +439,199 @@ def _parse_tickers_input(tickers_input: Union[List[str], str]) -> List[str]:
     Returns:
         List[str]: 解析后的ticker列表
     """
+    # DEBUG: 记录函数入口
+    try:
+        from ..utils.debug_logger import debug_parse_step, debug_param
+        debug_param(
+            "_parse_tickers_input:ENTRY", 
+            "tickers_input", 
+            tickers_input,
+            f"Initial type: {type(tickers_input).__name__}"
+        )
+    except:
+        pass
+    
     # 如果已经是列表，直接返回
     if isinstance(tickers_input, list):
+        try:
+            debug_parse_step(
+                "_parse_tickers_input",
+                "CHECK_IS_LIST",
+                tickers_input,
+                tickers_input,
+                success=True
+            )
+        except:
+            pass
         return tickers_input
     
     # 如果不是字符串，转换为字符串
     if not isinstance(tickers_input, str):
-        return [str(tickers_input)]
+        result = [str(tickers_input)]
+        try:
+            debug_parse_step(
+                "_parse_tickers_input",
+                "CONVERT_TO_STRING",
+                tickers_input,
+                result,
+                success=True
+            )
+        except:
+            pass
+        return result
     
     # 去除首尾空格
     tickers_str = tickers_input.strip()
     
+    try:
+        debug_param(
+            "_parse_tickers_input:STRIPPED",
+            "tickers_str",
+            tickers_str,
+            f"After strip, length: {len(tickers_str)}"
+        )
+    except:
+        pass
+    
     # 如果为空字符串
     if not tickers_str:
+        try:
+            debug_parse_step(
+                "_parse_tickers_input",
+                "EMPTY_STRING",
+                tickers_str,
+                [],
+                success=True
+            )
+        except:
+            pass
         return []
     
     # 方法1: 尝试JSON解析
     try:
         result = json.loads(tickers_str)
         if isinstance(result, list):
+            try:
+                debug_parse_step(
+                    "_parse_tickers_input",
+                    "JSON_PARSE_LIST",
+                    tickers_str,
+                    result,
+                    success=True
+                )
+            except:
+                pass
             return result
         elif isinstance(result, str):
-            return [result]
-    except:
-        pass
+            result_list = [result]
+            try:
+                debug_parse_step(
+                    "_parse_tickers_input",
+                    "JSON_PARSE_STRING",
+                    tickers_str,
+                    result_list,
+                    success=True
+                )
+            except:
+                pass
+            return result_list
+    except Exception as e:
+        try:
+            debug_parse_step(
+                "_parse_tickers_input",
+                "JSON_PARSE_FAILED",
+                tickers_str,
+                None,
+                success=False,
+                error=str(e)
+            )
+        except:
+            pass
     
     # 方法2: 尝试Python ast解析
     try:
         result = ast.literal_eval(tickers_str)
         if isinstance(result, list):
+            try:
+                debug_parse_step(
+                    "_parse_tickers_input",
+                    "AST_PARSE_LIST",
+                    tickers_str,
+                    result,
+                    success=True
+                )
+            except:
+                pass
             return result
         elif isinstance(result, str):
-            return [result]
-    except:
-        pass
+            result_list = [result]
+            try:
+                debug_parse_step(
+                    "_parse_tickers_input",
+                    "AST_PARSE_STRING",
+                    tickers_str,
+                    result_list,
+                    success=True
+                )
+            except:
+                pass
+            return result_list
+    except Exception as e:
+        try:
+            debug_parse_step(
+                "_parse_tickers_input",
+                "AST_PARSE_FAILED",
+                tickers_str,
+                None,
+                success=False,
+                error=str(e)
+            )
+        except:
+            pass
     
     # 方法3: 检查是否是逗号分隔（优先于空格）
     if ',' in tickers_str:
-        return [s.strip() for s in tickers_str.split(',') if s.strip()]
+        result = [s.strip() for s in tickers_str.split(',') if s.strip()]
+        try:
+            debug_parse_step(
+                "_parse_tickers_input",
+                "COMMA_SPLIT",
+                tickers_str,
+                result,
+                success=True
+            )
+        except:
+            pass
+        return result
     
     # 方法4: 检查是否是空格分隔
     if ' ' in tickers_str:
-        return [s.strip() for s in tickers_str.split() if s.strip()]
+        result = [s.strip() for s in tickers_str.split() if s.strip()]
+        try:
+            debug_parse_step(
+                "_parse_tickers_input",
+                "SPACE_SPLIT",
+                tickers_str,
+                result,
+                success=True
+            )
+        except:
+            pass
+        return result
     
     # 方法5: 作为单个ticker
-    return [tickers_str]
+    result = [tickers_str]
+    try:
+        debug_parse_step(
+            "_parse_tickers_input",
+            "SINGLE_TICKER",
+            tickers_str,
+            result,
+            success=True
+        )
+    except:
+        pass
+    return result
 
 
 def get_usage_guidelines() -> List[str]:

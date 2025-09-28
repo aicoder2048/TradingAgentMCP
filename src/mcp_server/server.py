@@ -10,6 +10,13 @@ from .tools.get_options_chain_tool import options_chain_tool
 from .tools.cash_secured_put_strategy_tool import cash_secured_put_strategy_tool
 from .tools.covered_call_strategy_tool import covered_call_strategy_tool
 from .tools.option_assignment_probability_tool import option_assignment_probability_tool
+from .tools.option_expirations_tool import (
+    get_option_expirations_tool,
+    get_next_expiration_tool,
+    get_weekly_expirations_tool,
+    get_monthly_expirations_tool,
+    filter_expirations_by_days_tool
+)
 from .prompts.hello_prompt import call_hello_multiple
 from .prompts.income_generation_csp_prompt import income_generation_csp_engine
 from .config.settings import settings
@@ -268,6 +275,104 @@ def create_server() -> FastMCP:
             risk_free_rate=risk_free_rate
         )
 
+    @mcp.tool()
+    async def get_option_expirations_tool_mcp(
+        symbol: str,
+        min_days: int = None,
+        max_days: int = None
+    ) -> Dict[str, Any]:
+        """
+        获取期权到期日列表，支持按天数过滤。
+        
+        这是获取期权到期日的核心工具，可以替代手动计算到期日期。
+        特别适合在调用 options_chain_tool 之前确定正确的到期日。
+        
+        Args:
+            symbol: 股票代码 (例如: "AAPL", "TSLA", "NVDA")
+            min_days: 最小到期天数过滤 (可选)
+            max_days: 最大到期天数过滤 (可选)
+        
+        Returns:
+            包含到期日信息列表和统计摘要的字典
+        """
+        return await get_option_expirations_tool(symbol, min_days, max_days)
+
+    @mcp.tool()
+    async def get_next_expiration_tool_mcp(symbol: str) -> Dict[str, Any]:
+        """
+        获取下一个最近的期权到期日。
+        
+        快速获取最近可用的期权到期日，适合需要立即执行策略的场景。
+        
+        Args:
+            symbol: 股票代码 (例如: "AAPL", "TSLA", "NVDA")
+        
+        Returns:
+            包含下一个到期日信息的字典
+        """
+        return await get_next_expiration_tool(symbol)
+
+    @mcp.tool()
+    async def get_weekly_expirations_tool_mcp(
+        symbol: str,
+        weeks: int = 4
+    ) -> Dict[str, Any]:
+        """
+        获取未来几周的周期权到期日。
+        
+        专门用于短期策略，如7-28天的现金担保PUT或备兑看涨策略。
+        周期权通常流动性较好，适合频繁交易。
+        
+        Args:
+            symbol: 股票代码 (例如: "AAPL", "TSLA", "NVDA")
+            weeks: 获取未来几周的到期日 (默认: 4)
+        
+        Returns:
+            包含周期权到期日列表的字典
+        """
+        return await get_weekly_expirations_tool(symbol, weeks)
+
+    @mcp.tool()
+    async def get_monthly_expirations_tool_mcp(
+        symbol: str,
+        months: int = 6
+    ) -> Dict[str, Any]:
+        """
+        获取未来几个月的月期权到期日。
+        
+        适用于中长期策略，月期权通常流动性最佳，执行价格选择较多。
+        
+        Args:
+            symbol: 股票代码 (例如: "AAPL", "TSLA", "NVDA")
+            months: 获取未来几个月的到期日 (默认: 6)
+        
+        Returns:
+            包含月期权到期日列表的字典
+        """
+        return await get_monthly_expirations_tool(symbol, months)
+
+    @mcp.tool()
+    async def filter_expirations_by_days_tool_mcp(
+        symbol: str,
+        min_days: int = 7,
+        max_days: int = 28
+    ) -> Dict[str, Any]:
+        """
+        获取指定天数范围内的期权到期日。
+        
+        针对收入生成策略优化的工具，默认7-28天窗口非常适合
+        高频收入策略。这个工具可以替代手动计算到期日的方式。
+        
+        Args:
+            symbol: 股票代码 (例如: "AAPL", "TSLA", "NVDA")
+            min_days: 最小天数 (默认: 7)
+            max_days: 最大天数 (默认: 28)
+        
+        Returns:
+            包含过滤后期权到期日和策略建议的字典
+        """
+        return await filter_expirations_by_days_tool(symbol, min_days, max_days)
+
     @mcp.prompt()
     async def call_hello_multiple_prompt(name: str, times: int = 3) -> str:
         """
@@ -284,13 +389,13 @@ def create_server() -> FastMCP:
 
     @mcp.prompt()
     async def income_generation_csp_engine_prompt(
-        tickers: Union[List[str], str],
-        cash_usd: float,
+        tickers: str,  # 简化：只接受字符串，内部处理所有格式
+        cash_usd: Union[float, int, str],  # 修复: 支持多种数值类型
         min_days: int = 7,
         max_days: int = 28,
-        target_apy_pct: float = 50,
-        min_winrate_pct: float = 70,
-        confidence_pct: float = 90,
+        target_apy_pct: Union[float, int] = 50,  # 修复: 支持整数和浮点数
+        min_winrate_pct: Union[float, int] = 70,  # 修复: 支持整数和浮点数
+        confidence_pct: Union[float, int] = 90,   # 修复: 支持整数和浮点数
     ) -> str:
         """
         Generate income-focused Cash-Secured Put strategy execution prompt.
@@ -301,12 +406,12 @@ def create_server() -> FastMCP:
 
         Args:
             tickers: Target symbols - supports multiple formats:
-                - List: ["TSLA", "GOOG", "META"]  
-                - String (space): "TSLA GOOG META"
-                - String (comma): "TSLA,GOOG,META"
+                - JSON string: "[\"TSLA\", \"GOOG\", \"META\"]" or "['TSLA','GOOG','META']"
+                - Space separated: "TSLA GOOG META"
+                - Comma separated: "TSLA,GOOG,META"
                 - Single ticker: "TSLA"
-                (default: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"])
-            cash_usd: Available capital for strategies
+                (default: [\"SPY\", \"QQQ\", \"AAPL\", \"MSFT\", \"NVDA\"])
+            cash_usd: Available capital for strategies (accepts int, float, or string)
             min_days: Minimum days to expiration (default: 7)
             max_days: Maximum days to expiration (default: 28)
             target_apy_pct: Target annualized percentage yield (default: 50%)
@@ -317,8 +422,35 @@ def create_server() -> FastMCP:
             Comprehensive execution prompt string with tool call sequences,
             screening criteria, and professional risk management protocols
         """
+        # DEBUG: 记录MCP入口参数
+        try:
+            from .utils.debug_logger import debug_mcp_entry
+            debug_mcp_entry(
+                tickers,
+                cash_usd=cash_usd,
+                min_days=min_days,
+                max_days=max_days,
+                target_apy_pct=target_apy_pct,
+                min_winrate_pct=min_winrate_pct,
+                confidence_pct=confidence_pct
+            )
+        except ImportError:
+            # 如果debug模块不存在，静默失败
+            pass
+        except Exception as e:
+            print(f"DEBUG logging failed: {e}")
+        
+        # 修复: 统一转换所有数值参数为正确类型
+        try:
+            cash_usd = float(cash_usd)
+            target_apy_pct = float(target_apy_pct)
+            min_winrate_pct = float(min_winrate_pct)
+            confidence_pct = float(confidence_pct)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"参数类型转换失败: {e}")
+        
         return await income_generation_csp_engine(
-            tickers=tickers,
+            tickers=tickers,  # 现在直接传递字符串
             cash_usd=cash_usd,
             min_days=min_days,
             max_days=max_days,
