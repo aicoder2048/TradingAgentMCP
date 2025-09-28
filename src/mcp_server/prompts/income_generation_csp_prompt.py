@@ -273,6 +273,26 @@ option_assignment_probability_tool_mcp(
 )
 ```
 
+### 第六步: 科学化投资组合配置 (使用夏普比率优化)
+```
+# 收集所有分析过的策略数据
+strategies_data = [
+    # 将每个股票的CSP策略结果整理成列表
+]
+
+portfolio_optimization_tool_mcp_tool(
+    strategies_data=strategies_data,
+    total_capital={cash_usd},
+    optimization_method="sharpe",  # 使用夏普比率加权
+    risk_free_rate=0.048,  # 当前无风险利率4.8%
+    constraints={{
+        "min_allocation": 0.00,  # 最小仓位0%（允许不配置）
+        "max_allocation": 0.80,  # 最大仓位80%（允许集中投资）
+        "min_positions": 1       # 至少1个仓位（允许单一最优）
+    }}
+)
+```
+
 ## 📊 收入优化筛选标准
 
 ### 一级筛选 - 基础门槛
@@ -292,8 +312,9 @@ option_assignment_probability_tool_mcp(
    - 目标: ≥{min_winrate_pct}% 满分
 
 3. **风险调整收益** (25%权重):
-   - 夏普比率: 收益率/最大历史回撤
+   - 夏普比率: (年化收益率 - 无风险利率) / 波动率
    - 凯利公式优化: f* = (bp - q)/b
+   - 使用portfolio_optimization_tool_mcp_tool进行科学配置
 
 ## 🎯 专业输出规格要求
 
@@ -332,9 +353,15 @@ option_assignment_probability_tool_mcp(
 
 1. **策略有效性确认**: 所有推荐是否满足收入导向目标
 2. **分配风险评估**: 每个推荐的具体分配概率
-3. **资金配置建议**: 基于可用资金的最优仓位分配
+3. **资金配置建议**: 基于夏普比率的科学化仓位分配
+   - 明确说明每个股票的配置权重计算方法
+   - 展示夏普比率计算过程
+   - 解释为什么某些股票获得更高权重
 4. **执行时机建议**: 考虑市场环境的最佳开仓时间
 5. **监控检查点**: 需要日常监控的关键指标
+6. **数学逻辑验证**: 确保所有数学比较和结论正确
+   - 验证收益率vs目标比较的准确性
+   - 避免出现"34.8%超过50%"的逻辑错误
 
 ## ⚡ 开始执行
 

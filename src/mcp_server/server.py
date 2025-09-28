@@ -17,6 +17,7 @@ from .tools.option_expirations_tool import (
     get_monthly_expirations_tool,
     filter_expirations_by_days_tool
 )
+from .tools.portfolio_optimization_tool import portfolio_optimization_tool_mcp
 from .prompts.hello_prompt import call_hello_multiple
 from .prompts.income_generation_csp_prompt import income_generation_csp_engine
 from .config.settings import settings
@@ -372,6 +373,41 @@ def create_server() -> FastMCP:
             包含过滤后期权到期日和策略建议的字典
         """
         return await filter_expirations_by_days_tool(symbol, min_days, max_days)
+
+    @mcp.tool()
+    async def portfolio_optimization_tool_mcp_tool(
+        strategies_data: List[Dict[str, Any]],
+        total_capital: float,
+        optimization_method: str = "sharpe",
+        risk_free_rate: float = None,
+        constraints: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Portfolio optimization using scientific allocation methods.
+        
+        Implements multiple optimization strategies:
+        - Sharpe ratio optimization (default)
+        - Risk parity allocation
+        - Kelly criterion sizing
+        - Equal weight allocation
+        
+        Args:
+            strategies_data: List of strategy metrics dictionaries
+            total_capital: Total available capital
+            optimization_method: Method - "sharpe", "risk_parity", "kelly", "equal"
+            risk_free_rate: Risk-free rate (default: 4.8%)
+            constraints: Optional constraints (min/max allocation, min positions)
+            
+        Returns:
+            Optimized portfolio allocation with detailed metrics and explanations
+        """
+        return await portfolio_optimization_tool_mcp(
+            strategies_data=strategies_data,
+            total_capital=total_capital,
+            optimization_method=optimization_method,
+            risk_free_rate=risk_free_rate,
+            constraints=constraints
+        )
 
     @mcp.prompt()
     async def call_hello_multiple_prompt(name: str, times: int = 3) -> str:
