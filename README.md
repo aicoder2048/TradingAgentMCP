@@ -16,6 +16,7 @@
 - **🧠 智能期权筛选**: 基于Delta的期权选择、风险评估和专业订单格式化 🆕
 - **⚖️ 三级风险建议**: 保守、平衡、激进三种风险级别的投资建议 🆕
 - **💵 收入生成CSP引擎**: 专业收入导向现金担保看跌策略提示生成器，目标≥50%年化收益 🆕
+- **🏗️ 股票建仓CSP引擎**: 专业股票获取导向现金担保看跌策略提示生成器，欢迎分配建仓 🆕
 - **🔧 环境配置**: 基于环境变量的灵活配置，支持沙盒和生产环境
 - **🧩 模块化架构**: 工具、提示和配置的清晰分离
 - **🧪 测试就绪**: 内置 pytest 测试框架
@@ -354,6 +355,19 @@ uv run pytest tests/tools/test_hello_tool.py
     - `confidence_pct` (浮点数): 统计置信度 (默认: 90%)
   - 返回: 综合的收入导向策略执行提示，包含工具调用序列、筛选标准和风险管理协议
 
+- **stock_acquisition_csp_engine**: 股票建仓现金担保看跌策略引擎 🆕
+  - 生成以折扣价建立股票头寸的期权策略执行计划，欢迎股票分配
+  - 参数: 
+    - `tickers` (股票列表): 目标股票代码 (例如: ["AAPL", "MSFT"])
+    - `cash_usd` (浮点数): 可用资金
+    - `target_allocation_probability` (浮点数): 目标分配概率 (默认: 65.0%)
+    - `max_single_position_pct` (浮点数): 单股票最大仓位 (默认: 25.0%)
+    - `min_days` (整数): 最小到期天数 (默认: 21)
+    - `max_days` (整数): 最大到期天数 (默认: 60)
+    - `target_annual_return_pct` (浮点数): 目标年化收益率 (默认: 25.0%)
+    - `preferred_sectors` (字符串): 偏好行业 (默认: "Technology,Healthcare,Consumer Discretionary")
+  - 返回: 综合的股票建仓策略执行提示，包含基本面分析、期权筛选、组合配置和分配后管理
+
 ## 🎯 与 Claude Code 配合使用
 
 1. **启动服务器**: 服务器将根据 `.mcp.json` 中的配置运行
@@ -398,6 +412,11 @@ uv run pytest tests/tools/test_hello_tool.py
 使用 income_generation_csp_engine 提示生成 AAPL 收入导向策略 (tickers=["AAPL"], cash_usd=50000, target_apy_pct=50)
 使用 income_generation_csp_engine 提示生成多股票保守策略 (tickers=["SPY","QQQ"], cash_usd=25000, target_apy_pct=40, min_winrate_pct=80)
 使用 income_generation_csp_engine 提示生成激进收入策略 (tickers=["TSLA","NVDA"], cash_usd=100000, target_apy_pct=60, min_winrate_pct=65)
+
+# 股票建仓CSP策略引擎提示 🆕
+使用 stock_acquisition_csp_engine 提示生成 AAPL 保守建仓策略 (tickers=["AAPL"], cash_usd=50000, target_allocation_probability=60.0, max_single_position_pct=20.0)
+使用 stock_acquisition_csp_engine 提示生成多股票平衡建仓策略 (tickers=["AAPL","MSFT","GOOGL"], cash_usd=100000, target_allocation_probability=65.0, target_annual_return_pct=25.0)
+使用 stock_acquisition_csp_engine 提示生成激进建仓策略 (tickers=["TSLA","NVDA"], cash_usd=200000, target_allocation_probability=75.0, max_single_position_pct=35.0)
 ```
 
 ## 🚦 Development Workflow

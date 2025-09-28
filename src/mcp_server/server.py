@@ -1,6 +1,6 @@
 from fastmcp import FastMCP
 from contextlib import asynccontextmanager
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Optional
 from .tools.hello_tool import hello
 from .tools.get_market_time_tool import get_market_time_status
 from .tools.stock_key_info_tool import get_stock_key_info
@@ -493,6 +493,84 @@ def create_server() -> FastMCP:
             target_apy_pct=target_apy_pct,
             min_winrate_pct=min_winrate_pct,
             confidence_pct=confidence_pct
+        )
+
+    @mcp.prompt()
+    async def stock_acquisition_csp_engine_prompt(
+        tickers: str,
+        cash_usd: Union[float, int, str],
+        target_allocation_probability: float = 65.0,
+        max_single_position_pct: float = 25.0,
+        min_days: int = 21,
+        max_days: int = 60,
+        target_annual_return_pct: float = 25.0,
+        preferred_sectors: Optional[str] = None,
+    ) -> str:
+        """
+        Generate stock acquisition-focused Cash-Secured Put strategy execution prompt.
+
+        Creates a comprehensive execution plan for discount stock acquisition through
+        options assignment. Optimized for building equity positions at discount prices
+        rather than premium collection. Targets 15-35% annualized returns with Delta range 0.30-0.50.
+
+        Args:
+            tickers: Target symbols - supports multiple formats:
+                - JSON string: "[\"TSLA\", \"GOOG\", \"META\"]" or "['TSLA','GOOG','META']"
+                - Space separated: "TSLA GOOG META"
+                - Comma separated: "TSLA,GOOG,META"
+                - Single ticker: "TSLA"
+                (default: ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"])
+            cash_usd: Available capital for strategies (accepts int, float, or string)
+            target_allocation_probability: Target assignment probability % (default: 65%)
+            max_single_position_pct: Maximum single stock position % (default: 25%)
+            min_days: Minimum days to expiration (default: 21)
+            max_days: Maximum days to expiration (default: 60)
+            target_annual_return_pct: Target annualized return % (default: 25%)
+            preferred_sectors: Preferred sectors (optional, default: "Technology,Healthcare,Consumer Discretionary")
+
+        Returns:
+            Comprehensive execution prompt string with tool call sequences,
+            stock acquisition criteria, and professional portfolio management protocols
+        """
+        # DEBUG: 记录MCP入口参数
+        try:
+            from .utils.debug_logger import debug_mcp_entry
+            debug_mcp_entry(
+                tickers,
+                cash_usd=cash_usd,
+                target_allocation_probability=target_allocation_probability,
+                max_single_position_pct=max_single_position_pct,
+                min_days=min_days,
+                max_days=max_days,
+                target_annual_return_pct=target_annual_return_pct,
+                preferred_sectors=preferred_sectors
+            )
+        except ImportError:
+            # 如果debug模块不存在，静默失败
+            pass
+        except Exception as e:
+            print(f"DEBUG logging failed: {e}")
+        
+        # 修复: 统一转换所有数值参数为正确类型
+        try:
+            cash_usd = float(cash_usd)
+            target_allocation_probability = float(target_allocation_probability)
+            max_single_position_pct = float(max_single_position_pct)
+            target_annual_return_pct = float(target_annual_return_pct)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"参数类型转换失败: {e}")
+        
+        from .prompts.stock_acquisition_csp_prompt import stock_acquisition_csp_engine
+        
+        return await stock_acquisition_csp_engine(
+            tickers=tickers,
+            cash_usd=cash_usd,
+            target_allocation_probability=target_allocation_probability,
+            max_single_position_pct=max_single_position_pct,
+            min_days=min_days,
+            max_days=max_days,
+            target_annual_return_pct=target_annual_return_pct,
+            preferred_sectors=preferred_sectors
         )
 
     return mcp
