@@ -18,6 +18,7 @@ from .tools.option_expirations_tool import (
     filter_expirations_by_days_tool
 )
 from .tools.portfolio_optimization_tool import portfolio_optimization_tool_mcp
+from .tools.simplified_stock_allocation_tool import simplified_stock_allocation_tool
 from .prompts.hello_prompt import call_hello_multiple
 from .prompts.income_generation_csp_prompt import income_generation_csp_engine
 from .config.settings import settings
@@ -407,6 +408,45 @@ def create_server() -> FastMCP:
             optimization_method=optimization_method,
             risk_free_rate=risk_free_rate,
             constraints=constraints
+        )
+
+    @mcp.tool()
+    async def simplified_stock_allocation_tool_mcp(
+        stocks_data: List[Dict[str, Any]],
+        assignment_weight: float = 0.6,
+        discount_weight: float = 0.4,
+        min_weight: float = 0.15,
+        max_weight: float = 0.35,
+        include_detailed_report: bool = True
+    ) -> Dict[str, Any]:
+        """
+        极简股票建仓分配工具 - 核心公式：0.6 × assignment_prob + 0.4 × discount_depth
+        
+        完全摒弃主观质量因子，专注于CSP策略的本质：获得股票的概率和折扣深度。
+        
+        Args:
+            stocks_data: 股票数据列表，每个包含:
+                - symbol: 股票代码 (必需)
+                - assignment_prob: 分配概率 (必需，0.65-1.0)
+                - strike_price: 执行价 (必需)
+                - current_price: 当前价格 (必需)
+                - premium: 权利金 (必需)
+            assignment_weight: 分配概率权重 (默认0.6，更重视获得股票的概率)
+            discount_weight: 折扣深度权重 (默认0.4，适度考虑折扣幅度)
+            min_weight: 最小权重限制 (默认0.15)
+            max_weight: 最大权重限制 (默认0.35)
+            include_detailed_report: 是否包含详细报告 (默认True)
+        
+        Returns:
+            包含权重分配和完全客观分析结果的字典
+        """
+        return await simplified_stock_allocation_tool(
+            stocks_data=stocks_data,
+            assignment_weight=assignment_weight,
+            discount_weight=discount_weight,
+            min_weight=min_weight,
+            max_weight=max_weight,
+            include_detailed_report=include_detailed_report
         )
 
     @mcp.prompt()
