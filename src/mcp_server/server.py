@@ -19,6 +19,7 @@ from .tools.option_expirations_tool import (
 )
 from .tools.portfolio_optimization_tool import portfolio_optimization_tool_mcp
 from .tools.simplified_stock_allocation_tool import simplified_stock_allocation_tool
+from .tools.optimal_expiration_selector_tool import OptimalExpirationSelectorTool
 from .prompts.hello_prompt import call_hello_multiple
 from .prompts.income_generation_csp_prompt import income_generation_csp_engine
 from .config.settings import settings
@@ -411,6 +412,42 @@ def create_server() -> FastMCP:
         )
 
     @mcp.tool()
+    async def optimal_expiration_selector_tool_mcp(
+        symbol: str,
+        available_expirations: Optional[List[Union[str, Dict[str, Any]]]] = None,
+        strategy_type: str = 'csp',
+        volatility: float = 0.3,
+        weights: Optional[Dict[str, float]] = None
+    ) -> Dict[str, Any]:
+        """
+        智能期权到期日选择器 - 基于客观数学指标优化选择
+        
+        完全基于量化指标自动选择最优到期日，避免主观硬编码：
+        - Theta效率曲线（30-45天最优）
+        - Gamma风险控制（避免<21天的高风险）
+        - 流动性评分（周期权/月期权优先）
+        - 事件缓冲（避开财报等事件）
+        
+        Args:
+            symbol: 股票代码
+            available_expirations: 可用到期日列表（可选，如不提供则自动获取）
+            strategy_type: 策略类型 - "csp", "covered_call"等（默认"csp"）
+            volatility: 当前隐含波动率（可选，默认0.3）
+            weights: 自定义权重配置（可选）
+        
+        Returns:
+            最优到期日及详细评分、选择理由、各维度评分细节
+        """
+        tool = OptimalExpirationSelectorTool()
+        return await tool.execute(
+            symbol=symbol,
+            available_expirations=available_expirations,
+            strategy_type=strategy_type,
+            volatility=volatility,
+            weights=weights
+        )
+    
+    @mcp.tool()
     async def simplified_stock_allocation_tool_mcp(
         stocks_data: List[Dict[str, Any]],
         assignment_weight: float = 0.6,
@@ -541,8 +578,6 @@ def create_server() -> FastMCP:
         cash_usd: Union[float, int, str],
         target_allocation_probability: float = 65.0,
         max_single_position_pct: float = 25.0,
-        min_days: int = 21,
-        max_days: int = 60,
         target_annual_return_pct: float = 25.0,
         preferred_sectors: Optional[str] = None,
     ) -> str:
@@ -563,8 +598,6 @@ def create_server() -> FastMCP:
             cash_usd: Available capital for strategies (accepts int, float, or string)
             target_allocation_probability: Target assignment probability % (default: 65%)
             max_single_position_pct: Maximum single stock position % (default: 25%)
-            min_days: Minimum days to expiration (default: 21)
-            max_days: Maximum days to expiration (default: 60)
             target_annual_return_pct: Target annualized return % (default: 25%)
             preferred_sectors: Preferred sectors (optional, default: "Technology,Healthcare,Consumer Discretionary")
 
@@ -580,8 +613,6 @@ def create_server() -> FastMCP:
                 cash_usd=cash_usd,
                 target_allocation_probability=target_allocation_probability,
                 max_single_position_pct=max_single_position_pct,
-                min_days=min_days,
-                max_days=max_days,
                 target_annual_return_pct=target_annual_return_pct,
                 preferred_sectors=preferred_sectors
             )
@@ -607,8 +638,6 @@ def create_server() -> FastMCP:
             cash_usd=cash_usd,
             target_allocation_probability=target_allocation_probability,
             max_single_position_pct=max_single_position_pct,
-            min_days=min_days,
-            max_days=max_days,
             target_annual_return_pct=target_annual_return_pct,
             preferred_sectors=preferred_sectors
         )

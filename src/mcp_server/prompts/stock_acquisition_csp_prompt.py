@@ -21,9 +21,7 @@ async def stock_acquisition_csp_engine(
     tickers: str,
     cash_usd: float,
     target_allocation_probability: float = 65.0,
-    max_single_position_pct: float = 25.0,
-    min_days: int = 21,
-    max_days: int = 60,
+    max_single_position_pct: Optional[float] = None,
     target_annual_return_pct: float = 25.0,
     preferred_sectors: Optional[str] = None,
 ) -> str:
@@ -39,9 +37,7 @@ async def stock_acquisition_csp_engine(
             (默认: [\"AAPL\", \"MSFT\", \"GOOGL\", \"TSLA\", \"NVDA\"])
         cash_usd: 可用资金
         target_allocation_probability: 目标分配概率百分比 (默认: 65%)
-        max_single_position_pct: 单股票最大仓位百分比 (默认: 25%)
-        min_days: 最小到期天数 (默认: 21)
-        max_days: 最大到期天数 (默认: 60)
+        max_single_position_pct: 单股票最大仓位百分比 (可选，默认无限制，由智能分配决定)
         target_annual_return_pct: 目标年化收益率百分比 (默认: 25%)
         preferred_sectors: 偏好行业 (可选，默认: "Technology,Healthcare,Consumer Discretionary")
         
@@ -90,8 +86,7 @@ async def stock_acquisition_csp_engine(
     # 参数验证
     validation_result = _validate_stock_acquisition_parameters(
         tickers_list, cash_usd, target_allocation_probability, 
-        max_single_position_pct, min_days, max_days, 
-        target_annual_return_pct, preferred_sectors
+        max_single_position_pct, target_annual_return_pct, preferred_sectors
     )
     
     if not validation_result["is_valid"]:
@@ -117,8 +112,6 @@ async def stock_acquisition_csp_engine(
         cash_usd=cash_usd,
         target_allocation_probability=target_allocation_probability,
         max_single_position_pct=max_single_position_pct,
-        min_days=min_days,
-        max_days=max_days,
         target_annual_return_pct=target_annual_return_pct,
         preferred_sectors=preferred_sectors
     )
@@ -130,9 +123,7 @@ def _validate_stock_acquisition_parameters(
     tickers: List[str],
     cash_usd: float,
     target_allocation_probability: float,
-    max_single_position_pct: float,
-    min_days: int,
-    max_days: int,
+    max_single_position_pct: Optional[float],
     target_annual_return_pct: float,
     preferred_sectors: Optional[str]
 ) -> Dict[str, Any]:
@@ -172,23 +163,14 @@ def _validate_stock_acquisition_parameters(
     elif target_allocation_probability > 90:
         warnings.append("分配概率很高，风险较大")
     
-    # 验证单仓位限制
-    if not isinstance(max_single_position_pct, (int, float)) or max_single_position_pct < 0 or max_single_position_pct > 100:
-        errors.append("单股票仓位百分比必须在0-100%之间")
-    elif max_single_position_pct > 50:
-        warnings.append("单股票仓位过高，建议控制在50%以内")
+    # 验证单仓位限制（如果提供）
+    if max_single_position_pct is not None:
+        if not isinstance(max_single_position_pct, (int, float)) or max_single_position_pct < 0 or max_single_position_pct > 100:
+            errors.append("单股票仓位百分比必须在0-100%之间")
+        elif max_single_position_pct > 50:
+            warnings.append("单股票仓位过高，建议控制在50%以内")
     
-    # 验证天数范围
-    if not isinstance(min_days, int) or min_days < 1:
-        errors.append("最小天数必须为正整数")
-    if not isinstance(max_days, int) or max_days < 1:
-        errors.append("最大天数必须为正整数")
-    if min_days >= max_days:
-        errors.append("最小天数必须小于最大天数")
-    if min_days < 14:
-        warnings.append("最小天数较短，可能不适合股票建仓策略")
-    if max_days > 365:
-        warnings.append("最大天数超过1年，考虑使用LEAPS期权")
+    # 天数范围由智能到期日选择器决定，无需验证固定范围
     
     # 验证年化收益率
     if not isinstance(target_annual_return_pct, (int, float)) or target_annual_return_pct < 0 or target_annual_return_pct > 100:
@@ -213,9 +195,7 @@ def _generate_stock_acquisition_prompt(
     primary_ticker: str,
     cash_usd: float,
     target_allocation_probability: float,
-    max_single_position_pct: float,
-    min_days: int,
-    max_days: int,
+    max_single_position_pct: Optional[float],
     target_annual_return_pct: float,
     preferred_sectors: str
 ) -> str:
@@ -227,7 +207,14 @@ def _generate_stock_acquisition_prompt(
     """
     
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    max_position_size = cash_usd * (max_single_position_pct / 100.0)
+    
+    # 设置智能仓位管理
+    if max_single_position_pct is not None:
+        max_position_size = cash_usd * (max_single_position_pct / 100.0)
+        position_constraint_text = f"单股票≤{max_single_position_pct}%"
+    else:
+        max_position_size = cash_usd * 0.8  # 默认最大80%用于单个策略
+        position_constraint_text = "智能分配权重"
     
     prompt = f"""# 🏗️ 股票建仓现金担保PUT引擎
 
@@ -236,8 +223,8 @@ def _generate_stock_acquisition_prompt(
 **分析时间**: {current_time}
 **目标股票池**: {tickers_str}
 **可用资金**: ${cash_usd:,.0f}
-**期权到期窗口**: {min_days}~{max_days} 天
-**建仓目标**: 分配概率≥{target_allocation_probability}%、年化补偿≥{target_annual_return_pct}%、单股票≤{max_single_position_pct}%
+**期权到期策略**: 智能优化选择（无固定范围限制）
+**建仓目标**: 分配概率≥{target_allocation_probability}%、年化补偿≥{target_annual_return_pct}%、{position_constraint_text}
 **偏好行业**: {preferred_sectors}
 
 ## ⚠️ 关键执行原则
@@ -245,7 +232,7 @@ def _generate_stock_acquisition_prompt(
 **股票获取优先策略 - 欢迎股票分配**:
 - 🎯 **核心目标**: 以折扣价获得优质股票，权利金为次要考虑
 - 📊 **Delta范围**: 偏好 0.30~0.50 (目标分配概率{target_allocation_probability}%)
-- ⏰ **耐心建仓**: {min_days}-{max_days}天期权，给股价充分调整时间
+- ⏰ **耐心建仓**: 智能优化到期日，给股价充分调整时间
 - 💰 **合理补偿**: 年化收益{target_annual_return_pct}%，作为等待成本补偿
 
 ## 🔄 强制执行序列 - 按顺序执行以下工具
@@ -268,12 +255,29 @@ stock_info_tool(symbol="{primary_ticker}")
 stock_history_tool(symbol="{primary_ticker}", date_range="6m", interval="daily", include_indicators=true)
 ```
 
-### 第三步: 股票建仓导向CSP策略生成
+### 第三步: 智能到期日优化选择 (科学化核心!)
+```
+# 智能选择最优到期日 - 针对股票建仓策略优化
+# 不设固定天数范围，让算法自动优化选择
+optimal_expiration_selector_tool_mcp(
+    symbol="{primary_ticker}",
+    strategy_type="csp",  # 现金担保PUT策略
+    volatility=None,  # 自动检测当前隐含波动率
+    weights={{
+        "theta_efficiency": 0.30,    # Theta效率权重(中期持有偏好)
+        "gamma_risk": 0.20,         # Gamma风险控制
+        "liquidity": 0.25,          # 流动性评分(月期权优先)
+        "event_buffer": 0.25        # 事件缓冲(给股价调整时间)
+    }}
+)
+```
+
+### 第四步: 股票建仓导向CSP策略生成
 ```
 cash_secured_put_strategy_tool_mcp(
     symbol="{primary_ticker}",
     purpose_type="discount",  # 关键: 股票获取模式
-    duration="{_get_duration_from_days(min_days, max_days)}",
+    duration="[从第三步获得的最优到期日区间]",
     capital_limit={min(max_position_size, 200000)},
     include_order_blocks=true,
     min_premium=None,  # 不限制最小权利金
@@ -281,7 +285,7 @@ cash_secured_put_strategy_tool_mcp(
 )
 ```
 
-### 第四步: 期权链深度分析
+### 第五步: 期权链深度分析
 ```
 options_chain_tool_mcp(
     symbol="{primary_ticker}",
@@ -291,34 +295,30 @@ options_chain_tool_mcp(
 )
 ```
 
-### 第五步: 分配概率精确计算
+### 第六步: 分配概率精确计算
 ```
 option_assignment_probability_tool_mcp(
     symbol="{primary_ticker}",
-    strike_price="[从第三步获得的推荐执行价]",
+    strike_price="[从第四步获得的推荐执行价]",
     expiration="[最优到期日]",
     option_type="put",
     include_delta_comparison=true
 )
 ```
 
-### 第六步: 科学化股票建仓组合配置
+### 第七步: 科学化股票建仓组合配置
 ```
 # 收集所有分析过的策略数据
 strategies_data = [
     # 将每个股票的CSP策略结果整理成列表
 ]
 
-portfolio_optimization_tool_mcp_tool(
-    strategies_data=strategies_data,
-    total_capital={cash_usd},
-    optimization_method="sharpe",  # 使用夏普比率加权
-    risk_free_rate=0.048,  # 当前无风险利率4.8%
-    constraints={{
-        "min_allocation": 0.05,  # 最小仓位5%（避免过度分散）
-        "max_allocation": {max_single_position_pct/100:.2f},  # 最大仓位{max_single_position_pct}%
-        "min_positions": 1       # 至少1个仓位
-    }}
+# 使用简化股票分配工具进行科学化建仓权重配置
+simplified_stock_allocation_tool_mcp(
+    stocks_data=strategies_data,  # 包含分配概率、执行价、当前价格、权利金
+    assignment_weight=0.6,        # 分配概率权重60%（更重视获得股票的概率）
+    discount_weight=0.4,          # 折扣深度权重40%（适度考虑折扣幅度）
+    include_detailed_report=true
 )
 ```
 
@@ -369,14 +369,21 @@ portfolio_optimization_tool_mcp_tool(
    - 年化补偿率: (权利金/现金占用) × (365/到期天数) × 100%
    - 目标: ≥{target_annual_return_pct}% 满分
 
+### 到期日优化验证
+- **建仓时间窗口**: 验证选择的到期日是否给股价充分调整时间
+- **事件风险缓冲**: 确保避开财报、分红除权等重大事件
+- **流动性保障**: 优先选择月期权（建仓策略流动性需求更高）
+- **Gamma平衡**: 避免过短期权的高Gamma风险，但允许适度Gamma敞口
+
 ## 🎯 专业输出规格要求
 
 ### 必需输出格式
 1. **时间基准声明**: 明确声明分析基准时间
-2. **建仓策略对比表**: 包含至少3个风险级别的建议
-3. **专业订单格式**: JP Morgan风格的交易指令
-4. **分配后管理剧本**: 获得股票后的covered call策略
-5. **投资组合配置**: 科学化的仓位分配建议
+2. **到期日优化报告**: 展示智能选择器针对建仓策略的优化过程
+3. **建仓策略对比表**: 包含至少3个风险级别的建议
+4. **专业订单格式**: JP Morgan风格的交易指令
+5. **分配后管理剧本**: 获得股票后的covered call策略
+6. **投资组合配置**: 科学化的仓位分配建议
 
 ### 股票建仓控制检查清单
 - [ ] 所有推荐期权的Delta ≥ -0.50
@@ -384,7 +391,8 @@ portfolio_optimization_tool_mcp_tool(
 - [ ] 年化补偿率≥{target_annual_return_pct}%
 - [ ] 流动性评分 ≥ B级
 - [ ] 距离财报日期 > 7天
-- [ ] 单股票仓位 ≤ {max_single_position_pct}%
+- [ ] 智能仓位分配科学合理
+- [ ] 最优到期日评分 ≥ 70分
 
 ## 💡 建仓执行管理触发器
 
@@ -400,25 +408,26 @@ portfolio_optimization_tool_mcp_tool(
 **风险控制触发器**:
 - 基本面恶化时强制平仓
 - 技术破位时评估是否接受分配
-- 单股票仓位超过{max_single_position_pct+5}%时强制减仓
+- 根据智能分配结果动态管理仓位风险
 
 ## 🔚 最终验证与建仓总结要求
 
 执行完所有工具后，请提供:
 
 1. **建仓策略有效性确认**: 所有推荐是否满足股票获取目标
-2. **分配概率评估**: 每个推荐的具体分配概率
-3. **科学化资金配置**: 基于夏普比率的仓位分配
+2. **到期日优化验证**: 智能选择器针对建仓策略的评分和选择理由
+3. **分配概率评估**: 每个推荐的具体分配概率
+4. **科学化资金配置**: 基于夏普比率的仓位分配
    - 明确说明每个股票的配置权重计算方法
    - 展示夏普比率计算过程
    - 解释为什么某些股票获得更高权重
-4. **建仓时机建议**: 考虑市场环境的最佳开仓时间
-5. **分配后管理计划**: covered call策略的执行路径
-6. **数学逻辑验证**: 确保所有数学比较和结论正确
+5. **建仓时机建议**: 考虑市场环境的最佳开仓时间
+6. **分配后管理计划**: covered call策略的执行路径
+7. **数学逻辑验证**: 确保所有数学比较和结论正确
 
 ## ⚡ 开始执行
 
-请严格按照上述序列执行所有工具，重点关注**股票获取**而非权利金收取，确保所有推荐策略的分配概率≥{target_allocation_probability}%且年化补偿≥{target_annual_return_pct}%。
+请严格按照上述序列执行所有工具，重点关注**股票获取**而非权利金收取，确保所有推荐策略的分配概率≥{target_allocation_probability}%且年化补偿≥{target_annual_return_pct}%。特别注意使用智能到期日选择器优化建仓时机。
 
 ---
 *免责声明: 本分析仅供参考，期权交易存在重大风险。股票建仓策略涉及资金占用和分配风险，请根据个人风险承受能力谨慎决策。*
