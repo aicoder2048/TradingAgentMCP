@@ -223,7 +223,7 @@ def _generate_stock_acquisition_prompt(
 **分析时间**: {current_time}
 **目标股票池**: {tickers_str}
 **可用资金**: ${cash_usd:,.0f}
-**期权到期策略**: 智能优化选择（无固定范围限制）
+**期权到期策略**: 智能优化选择（股票获取主题：30-60天最优范围）
 **建仓目标**: 分配概率≥{target_allocation_probability}%、年化补偿≥{target_annual_return_pct}%、{position_constraint_text}
 **偏好行业**: {preferred_sectors}
 
@@ -257,27 +257,26 @@ stock_history_tool(symbol="{primary_ticker}", date_range="6m", interval="daily",
 
 ### 第三步: 智能到期日优化选择 (科学化核心!)
 ```
-# 智能选择最优到期日 - 针对股票建仓策略优化
-# 不设固定天数范围，让算法自动优化选择
+# 智能选择最优到期日 - 专门针对股票建仓CSP策略优化
+# 使用专门的股票获取导向策略主题，自动优化30-60天范围
 optimal_expiration_selector_tool_mcp(
     symbol="{primary_ticker}",
-    strategy_type="csp",  # 现金担保PUT策略
-    volatility=None,  # 自动检测当前隐含波动率
-    weights={{
-        "theta_efficiency": 0.30,    # Theta效率权重(中期持有偏好)
-        "gamma_risk": 0.20,         # Gamma风险控制
-        "liquidity": 0.25,          # 流动性评分(月期权优先)
-        "event_buffer": 0.25        # 事件缓冲(给股价调整时间)
-    }}
+    strategy_type="stock_acquisition_csp_theme",  # 专门的股票获取CSP策略主题
+    volatility=None  # 自动检测当前隐含波动率，权重由策略主题自动配置
 )
 ```
 
 ### 第四步: 股票建仓导向CSP策略生成
+⚠️ **关键**: 使用第三步智能优化器的结果，不要硬编码duration参数
 ```
+# 基于智能优化器推荐的到期日，手动计算对应的duration参数
+# 例如: 如果optimal_expiration_selector推荐59天，应该使用相应的duration
+# 30-45天 -> "1m", 45-75天 -> "3m", 等等
+
 cash_secured_put_strategy_tool_mcp(
     symbol="{primary_ticker}",
     purpose_type="discount",  # 关键: 股票获取模式
-    duration="[从第三步获得的最优到期日区间]",
+    duration="[根据第三步智能优化结果选择: 1m/3m/6m等]",
     capital_limit={min(max_position_size, 200000)},
     include_order_blocks=true,
     min_premium=None,  # 不限制最小权利金
@@ -286,21 +285,23 @@ cash_secured_put_strategy_tool_mcp(
 ```
 
 ### 第五步: 期权链深度分析
+⚠️ **关键**: 使用智能优化器推荐的具体到期日
 ```
 options_chain_tool_mcp(
     symbol="{primary_ticker}",
-    expiration="[从第三步获得的最优到期日]",
+    expiration="[使用第三步返回的optimal_expiration.date，如: 2025-11-27]",
     option_type="put", 
     include_greeks=true
 )
 ```
 
 ### 第六步: 分配概率精确计算
+⚠️ **关键**: 使用智能优化器推荐的具体到期日
 ```
 option_assignment_probability_tool_mcp(
     symbol="{primary_ticker}",
     strike_price="[从第四步获得的推荐执行价]",
-    expiration="[最优到期日]",
+    expiration="[使用第三步返回的optimal_expiration.date，如: 2025-11-27]",
     option_type="put",
     include_delta_comparison=true
 )
@@ -369,11 +370,12 @@ simplified_stock_allocation_tool_mcp(
    - 年化补偿率: (权利金/现金占用) × (365/到期天数) × 100%
    - 目标: ≥{target_annual_return_pct}% 满分
 
-### 到期日优化验证
-- **建仓时间窗口**: 验证选择的到期日是否给股价充分调整时间
-- **事件风险缓冲**: 确保避开财报、分红除权等重大事件
-- **流动性保障**: 优先选择月期权（建仓策略流动性需求更高）
-- **Gamma平衡**: 避免过短期权的高Gamma风险，但允许适度Gamma敞口
+### 股票获取导向到期日优化验证
+- **策略主题匹配**: 验证选择的到期日是否在30-60天建仓优化窗口
+- **建仓时间窗口**: 确保给股价充分调整时间达到执行价位
+- **事件风险缓冲**: 避开财报等重大事件，但允许合理的市场波动
+- **流动性保障**: 优先选择月期权（建仓策略需要更好的流动性）
+- **行权概率优化**: 确保Delta范围适合提高股票分配概率
 
 ## 🎯 专业输出规格要求
 
@@ -415,7 +417,8 @@ simplified_stock_allocation_tool_mcp(
 执行完所有工具后，请提供:
 
 1. **建仓策略有效性确认**: 所有推荐是否满足股票获取目标
-2. **到期日优化验证**: 智能选择器针对建仓策略的评分和选择理由
+2. **策略主题验证**: 确认使用了 stock_acquisition_csp_theme 并在30-60天最优范围内
+3. **到期日优化验证**: 智能选择器针对建仓策略的评分、数学推理和选择理由
 3. **分配概率评估**: 每个推荐的具体分配概率
 4. **科学化资金配置**: 基于夏普比率的仓位分配
    - 明确说明每个股票的配置权重计算方法
