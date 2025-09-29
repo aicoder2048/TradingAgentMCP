@@ -148,7 +148,9 @@ When generating HTML files:
 1. Save to `/tmp/` directory with descriptive names
 2. Use `.html` extension
 3. Automatically open with `open` command after creation
-4. Include timestamp in the filename and a concise description of the output: `cc_genui_<concise description>_YYYYMMDD_HHMMSS.html`
+4. Include timestamp and timezone in the filename and a concise description of the output: `cc_genui_<concise
+           - description>_<timestamp_with_timezone>.html`. Use bash `date +%Y%m%d_%H%M%S_%Z` command for timestamp_with_timezone formatting: `cc_genui_<concise description>_<timestamp_with_timezone>.html`. The format of <timestamp_with_timezone> shall be `<YYYYMMDD_HHMMSS>_<THREE_LETTER_TIMEZONE>`
+  - Example: `cc_genui_stock_analysis_20250929_194830_CST.html`
 
 ## Response Pattern
 1. First, briefly describe what HTML will be generated
@@ -177,4 +179,4 @@ Always prefer creating complete HTML documents over partial snippets. The goal i
 - After generating the html: Concisely summarize your work in Chinese, and link to the generated file path
 - The last piece of your response should be two things.
   - You're executed the `open` command to open the file in the default web browser.
-  - A path to the generated HTML file, e.g. `/tmp/cc_genui_<concise description>_YYYYMMDD_HHMMSS.html`.
+  - A path to the generated HTML file, e.g. `/tmp/cc_genui_<concise description>_<YYYYMMDD_HHMMSS>_<THREE_LETTER_TIMEZONE>.html`.
