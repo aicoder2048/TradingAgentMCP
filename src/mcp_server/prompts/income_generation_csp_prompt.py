@@ -254,7 +254,7 @@ cash_secured_put_strategy_tool_mcp(
 ```
 options_chain_tool_mcp(
     symbol="{primary_ticker}",
-    expiration="[使用第三步返回的optimal_expiration.date，如: 2025-10-18]",
+    expiration="[使用第三步返回的optimal_expiration.date]",
     option_type="put",
     include_greeks=true
 )
@@ -266,7 +266,7 @@ options_chain_tool_mcp(
 option_assignment_probability_tool_mcp(
     symbol="{primary_ticker}",
     strike_price="[从第四步获得的推荐执行价]",
-    expiration="[使用第三步返回的optimal_expiration.date，如: 2025-10-18]",
+    expiration="[使用第三步返回的optimal_expiration.date]",
     option_type="put",
     include_delta_comparison=true
 )
