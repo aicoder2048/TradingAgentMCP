@@ -48,7 +48,23 @@ async def covered_call_strategy_tool(
     Args:
         symbol: 股票代码 (e.g., "AAPL", "TSLA", "NVDA")
         purpose_type: 策略目的 - "income" (收入导向) 或 "exit" (减仓导向)
-        duration: 时间周期 - "1w", "2w", "1m", "3m", "6m", "1y"
+        duration: 时间跨度
+            - "1w": 1周 (5-10天，偏好周度期权)
+            - "2w": 2周 (10-17天，偏好周度期权)  
+            - "3w": 3周 (17-24天，偏好周度期权)
+            - "1m": 1月 (21-35天，偏好月度期权)
+            - "2m": 2月 (35-50天，偏好月度期权)
+            - "3m": 3月 (50-75天，偏好月度期权)
+            - "4m": 4月 (75-105天，偏好月度期权)
+            - "5m": 5月 (105-135天，偏好月度期权)
+            - "6m": 6月 (135-165天，偏好季度期权)
+            - "7m": 7月 (165-195天，偏好季度期权)
+            - "8m": 8月 (195-225天，偏好季度期权)
+            - "9m": 9月 (225-255天，偏好季度期权)
+            - "10m": 10月 (255-285天，偏好季度期权)
+            - "11m": 11月 (285-315天，偏好季度期权)
+            - "1y": 1年 (315-400天，LEAPS期权)
+            - "YYYY-MM-DD": 具体到期日期 (例如: "2025-01-17")
         shares_owned: 持有股票数量 (必须 >= 100)
         avg_cost: 每股平均成本基础 (可选，用于税务分析)
         min_premium: 最低权利金门槛 (可选)
@@ -111,6 +127,29 @@ async def covered_call_strategy_tool(
                 "status": "invalid_parameters",
                 "error": f"策略类型必须是 {valid_purposes} 之一",
                 "provided": purpose_type
+            }
+        
+        # Duration 验证 - 与 CSP 工具保持一致
+        duration = duration.lower().strip()
+        
+        # 支持的 duration 参数
+        valid_durations = [
+            "1w", "2w", "3w",  # 周级别
+            "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "10m", "11m",  # 月级别
+            "1y"  # 年级别
+        ]
+        
+        # 检查是否为具体日期格式 (YYYY-MM-DD)
+        import re
+        date_pattern = r'^\d{4}-\d{2}-\d{2}$'
+        is_specific_date = re.match(date_pattern, duration)
+        
+        if not is_specific_date and duration not in valid_durations:
+            return {
+                "symbol": symbol,
+                "status": "error",
+                "error": "invalid_duration",
+                "message": f"持续时间必须是以下之一: {', '.join(valid_durations)}，或者YYYY-MM-DD格式的具体日期 (例如: '2025-01-17')"
             }
         
         # 初始化组件
@@ -349,7 +388,22 @@ def validate_cc_parameters(
         errors.append("covered call策略需要至少100股持仓")
     elif shares_owned % 100 != 0:
         errors.append(f"建议持股数量为100的倍数以最大化期权合约利用率 (当前: {shares_owned})")
-    
+
+    # Duration 验证 - 与主函数保持一致
+    valid_durations = [
+        "1w", "2w", "3w",  # 周级别
+        "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "10m", "11m",  # 月级别
+        "1y"  # 年级别
+    ]
+
+    # 检查是否为具体日期格式 (YYYY-MM-DD)
+    import re
+    date_pattern = r'^\d{4}-\d{2}-\d{2}$'
+    is_specific_date = re.match(date_pattern, duration)
+
+    if not is_specific_date and duration not in valid_durations:
+        errors.append(f"持续时间必须是以下之一: {', '.join(valid_durations)}，或者YYYY-MM-DD格式的具体日期 (例如: '2025-01-17')")
+
     # 平均成本验证
     if avg_cost is not None and avg_cost <= 0:
         errors.append("平均成本必须为正数")
