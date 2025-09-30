@@ -234,8 +234,9 @@ class OptimalExpirationSelectorTool:
         注意：这需要实际的Tradier客户端实现
         """
         if not self.tradier_client:
-            # 如果没有客户端，返回模拟数据用于测试
-            return self._get_mock_expirations()
+            # 如果没有客户端，返回None让调用方处理
+            logger.warning(f"无Tradier客户端，无法获取{symbol}的到期日数据")
+            return None
         
         try:
             # 实际调用Tradier API
@@ -246,35 +247,6 @@ class OptimalExpirationSelectorTool:
             logger.error(f"获取到期日失败: {e}")
         
         return None
-    
-    def _get_mock_expirations(self) -> List[str]:
-        """
-        返回模拟的到期日数据（用于测试）
-        """
-        base = datetime.now()
-        expirations = []
-        
-        # 添加接下来的几个周五（周期权）
-        for weeks in [1, 2, 3, 4, 5, 6, 7, 8]:
-            exp_date = base + timedelta(weeks=weeks)
-            # 调整到周五
-            days_ahead = 4 - exp_date.weekday()
-            if days_ahead <= 0:
-                days_ahead += 7
-            exp_date += timedelta(days=days_ahead)
-            expirations.append(exp_date.strftime("%Y-%m-%d"))
-        
-        # 添加接下来的几个月末（月期权）
-        for months in [1, 2, 3]:
-            exp_date = base.replace(day=1) + timedelta(days=32 * months)
-            exp_date = exp_date.replace(day=1) - timedelta(days=1)
-            # 调整到第三个周五
-            first_day = exp_date.replace(day=1)
-            first_friday = first_day + timedelta(days=(4 - first_day.weekday()) % 7)
-            third_friday = first_friday + timedelta(weeks=2)
-            expirations.append(third_friday.strftime("%Y-%m-%d"))
-        
-        return sorted(list(set(expirations)))
     
     def _generate_comparison(self, 
                             all_expirations: List[Dict],

@@ -396,6 +396,330 @@ class TestCashSecuredPutStrategyTool:
         assert result["status"] == "error"
         assert "error" in result
 
+    @pytest.mark.asyncio
+    @patch('src.mcp_server.tools.cash_secured_put_strategy_tool.TradierClient')
+    @patch('src.mcp_server.tools.cash_secured_put_strategy_tool.ExpirationSelector')
+    @patch('src.mcp_server.tools.cash_secured_put_strategy_tool.CashSecuredPutAnalyzer')
+    async def test_large_capital_allocation(self, mock_analyzer_class, mock_expiration_class, mock_client_class):
+        """Test successful large capital allocation (100万美元) with multiple contracts."""
+        # Setup mock client
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        
+        # Mock quote data for TSLA
+        mock_quote = TradierQuote(
+            symbol="TSLA",
+            last=441.10,
+            change=0.87,
+            change_percentage=0.20,
+            volume=54255194,
+            last_volume=100
+        )
+        mock_client.get_quotes.return_value = [mock_quote]
+        mock_client.calculate_resistance_levels.return_value = {
+            "resistance_20d": 450.0,
+            "resistance_60d": 460.0
+        }
+        
+        # Setup mock expiration selector
+        mock_expiration = Mock()
+        mock_expiration_class.return_value = mock_expiration
+        mock_expiration.get_optimal_expiration = AsyncMock(return_value=ExpirationSelectionResult(
+            selected_date="2025-10-24",
+            selection_reason="optimal 3-week expiration",
+            metadata={"actual_days": 24, "expiration_type": "weeklys"},
+            alternatives=[]
+        ))
+        
+        # Setup mock analyzer
+        mock_analyzer = Mock()
+        mock_analyzer_class.return_value = mock_analyzer
+        mock_analyzer.delta_ranges = {"income": {"min": -0.30, "max": -0.10}}
+        
+        # Mock optimal strikes with different risk levels
+        mock_optimal_strikes = [
+            {
+                "symbol": "TSLA251024P00355000",
+                "strike_price": 355.0,
+                "delta": -0.1024,
+                "premium": 3.53,
+                "assignment_probability": 11.6,
+                "composite_score": 43.22,
+                "required_capital": 35500.0,
+                "expiration": "2025-10-24",
+                "days_to_expiry": 24
+            },
+            {
+                "symbol": "TSLA251024P00400000", 
+                "strike_price": 400.0,
+                "delta": -0.2423,
+                "premium": 11.58,
+                "assignment_probability": 29.4,
+                "composite_score": 52.62,
+                "required_capital": 40000.0,
+                "expiration": "2025-10-24",
+                "days_to_expiry": 24
+            },
+            {
+                "symbol": "TSLA251024P00410000",
+                "strike_price": 410.0,
+                "delta": -0.2912,
+                "premium": 14.73,
+                "assignment_probability": 34.7,
+                "composite_score": 50.8,
+                "required_capital": 41000.0,
+                "expiration": "2025-10-24",
+                "days_to_expiry": 24
+            }
+        ]
+        mock_analyzer.find_optimal_strikes = AsyncMock(return_value=mock_optimal_strikes)
+        
+        # Mock recommendation engine and other components
+        with patch('src.mcp_server.tools.cash_secured_put_strategy_tool.StrategyRecommendationEngine') as mock_rec_engine_class, \
+             patch('src.mcp_server.tools.cash_secured_put_strategy_tool.ProfessionalOrderFormatter') as mock_formatter_class, \
+             patch('src.mcp_server.tools.cash_secured_put_strategy_tool.export_csp_analysis_to_csv') as mock_export, \
+             patch('src.mcp_server.tools.cash_secured_put_strategy_tool.get_market_context') as mock_context, \
+             patch('src.mcp_server.tools.cash_secured_put_strategy_tool.generate_execution_notes') as mock_notes:
+            
+            # Setup recommendation engine with three different risk profiles
+            mock_rec_engine = Mock()
+            mock_rec_engine_class.return_value = mock_rec_engine
+            mock_recommendations = {
+                "conservative": {
+                    "profile": "conservative",
+                    "option_details": {**mock_optimal_strikes[0], "bid": 3.50, "ask": 3.55},
+                    "pnl_analysis": {
+                        "max_profit": 353.0,
+                        "breakeven_price": 351.47,
+                        "required_capital": 35500.0,
+                        "return_on_capital": 0.99,
+                        "annualized_return": 15.1
+                    },
+                    "risk_metrics": {
+                        "assignment_probability": 11.6,
+                        "delta": -0.1024,
+                        "theta_per_day": 33.28,
+                        "implied_volatility": 0.671202,
+                        "liquidity_score": 85.5
+                    },
+                    "recommendation_reasoning": "Conservative strategy for capital preservation"
+                },
+                "balanced": {
+                    "profile": "balanced", 
+                    "option_details": {**mock_optimal_strikes[1], "bid": 11.50, "ask": 11.65},
+                    "pnl_analysis": {
+                        "max_profit": 1158.0,
+                        "breakeven_price": 388.42,
+                        "required_capital": 40000.0,
+                        "return_on_capital": 2.90,
+                        "annualized_return": 44.0
+                    },
+                    "risk_metrics": {
+                        "assignment_probability": 29.4,
+                        "delta": -0.2423,
+                        "theta_per_day": 48.02,
+                        "implied_volatility": 0.632013,
+                        "liquidity_score": 96.1
+                    },
+                    "recommendation_reasoning": "Balanced risk-return profile"
+                },
+                "aggressive": {
+                    "profile": "aggressive",
+                    "option_details": {**mock_optimal_strikes[2], "bid": 14.65, "ask": 14.80},
+                    "pnl_analysis": {
+                        "max_profit": 1473.0,
+                        "breakeven_price": 395.27,
+                        "required_capital": 41000.0,
+                        "return_on_capital": 3.59,
+                        "annualized_return": 54.6
+                    },
+                    "risk_metrics": {
+                        "assignment_probability": 34.7,
+                        "delta": -0.2912,
+                        "theta_per_day": 51.50,
+                        "implied_volatility": 0.628983,
+                        "liquidity_score": 81.3
+                    },
+                    "recommendation_reasoning": "Aggressive strategy for higher returns"
+                }
+            }
+            mock_rec_engine.generate_three_alternatives.return_value = mock_recommendations
+            
+            # Setup order formatter with multi-contract support
+            mock_formatter = Mock()
+            mock_formatter_class.return_value = mock_formatter
+            mock_formatter.format_order_block.return_value = "Single Contract Order Block"
+            mock_formatter.format_multi_contract_order.return_value = "Multi Contract Order Block"
+            
+            # Setup other mocks
+            mock_export.return_value = "./data/csp_TSLA_1M_test.csv"
+            mock_context.return_value = {"implied_volatility": 0.63, "volatility_regime": "high"}
+            mock_notes.return_value = "Execution notes for large capital allocation"
+            
+            # Test with 1,000,000 USD capital
+            result = await cash_secured_put_strategy_tool(
+                symbol="TSLA",
+                purpose_type="income",
+                duration="3w",
+                capital_limit=1000000,
+                include_order_blocks=True
+            )
+            
+            # Verify successful response
+            assert result["status"] == "success"
+            assert result["symbol"] == "TSLA"
+            assert result["current_price"] == 441.10
+            assert result["strategy_parameters"]["capital_limit"] == 1000000
+            assert result["strategy_parameters"]["purpose_type"] == "income"
+            assert result["strategy_parameters"]["duration"] == "3w"
+            
+            # Verify capital allocation is included
+            assert "capital_allocation" in result
+            assert result["capital_allocation"] is not None
+            
+            capital_allocation = result["capital_allocation"]
+            assert capital_allocation["available_capital"] == 1000000
+            assert "strategies" in capital_allocation
+            
+            # Check each strategy allocation
+            strategies = capital_allocation["strategies"]
+            
+            # Conservative strategy: $35,500 per contract
+            if "conservative" in strategies:
+                conservative = strategies["conservative"]
+                assert conservative["single_contract_capital"] == 35500
+                assert conservative["max_contracts"] == 28  # 1,000,000 // 35,500
+                assert conservative["total_capital_used"] == 28 * 35500
+                assert conservative["capital_utilization"] > 90  # Should be high utilization
+                
+            # Balanced strategy: $40,000 per contract  
+            if "balanced" in strategies:
+                balanced = strategies["balanced"]
+                assert balanced["single_contract_capital"] == 40000
+                assert balanced["max_contracts"] == 25  # 1,000,000 // 40,000
+                assert balanced["total_capital_used"] == 25 * 40000
+                assert balanced["capital_utilization"] == 100.0  # Perfect utilization
+                
+            # Aggressive strategy: $41,000 per contract
+            if "aggressive" in strategies:
+                aggressive = strategies["aggressive"]
+                assert aggressive["single_contract_capital"] == 41000
+                assert aggressive["max_contracts"] == 24  # 1,000,000 // 41,000
+                assert aggressive["total_capital_used"] == 24 * 41000
+                
+            # Verify summary statistics
+            summary = capital_allocation["summary"]
+            assert summary["total_strategies"] == 3
+            assert "best_strategy_by_utilization" in summary
+            assert "best_strategy_by_return" in summary
+            
+            # Verify order blocks use multi-contract format
+            assert "order_blocks" in result
+            order_blocks = result["order_blocks"]
+            
+            # Should have called format_multi_contract_order for each strategy
+            assert mock_formatter.format_multi_contract_order.call_count == 3
+            
+            # Verify each call was made with correct parameters
+            calls = mock_formatter.format_multi_contract_order.call_args_list
+            
+            # Check conservative call (28 contracts)
+            conservative_call = next((call for call in calls 
+                                    if call[0][1] == 28), None)  # contract_count = 28
+            assert conservative_call is not None
+            assert conservative_call[0][2] == 1000000  # total_capital
+            
+            # Check balanced call (25 contracts)  
+            balanced_call = next((call for call in calls 
+                                if call[0][1] == 25), None)  # contract_count = 25
+            assert balanced_call is not None
+            
+            # Check aggressive call (24 contracts)
+            aggressive_call = next((call for call in calls 
+                                  if call[0][1] == 24), None)  # contract_count = 24
+            assert aggressive_call is not None
+            
+            # Verify CSV export and other components
+            assert result["csv_export_path"] == "./data/csp_TSLA_1M_test.csv"
+            assert "analysis_summary" in result
+            
+            analysis_summary = result["analysis_summary"]
+            assert analysis_summary["total_options_analyzed"] == 3
+            assert analysis_summary["recommendations_generated"] == 3
+
+    @pytest.mark.asyncio
+    async def test_capital_allocation_calculation(self):
+        """Test the calculate_capital_allocation function directly."""
+        from src.mcp_server.tools.cash_secured_put_strategy_tool import calculate_capital_allocation
+        
+        # Mock recommendation data
+        recommendations = {
+            "conservative": {
+                "option_details": {
+                    "strike_price": 355.0,
+                    "premium": 3.53,
+                    "days_to_expiry": 24
+                },
+                "risk_metrics": {
+                    "assignment_probability": 11.6
+                }
+            },
+            "balanced": {
+                "option_details": {
+                    "strike_price": 400.0,
+                    "premium": 11.58,
+                    "days_to_expiry": 24
+                },
+                "risk_metrics": {
+                    "assignment_probability": 29.4
+                }
+            },
+            "aggressive": {
+                "option_details": {
+                    "strike_price": 410.0,
+                    "premium": 14.73,
+                    "days_to_expiry": 24
+                },
+                "risk_metrics": {
+                    "assignment_probability": 34.7
+                }
+            }
+        }
+        
+        # Test with 1,000,000 capital
+        result = calculate_capital_allocation(recommendations, 1000000)
+        
+        assert result["available_capital"] == 1000000
+        assert len(result["strategies"]) == 3
+        
+        # Test conservative allocation
+        conservative = result["strategies"]["conservative"]
+        assert conservative["single_contract_capital"] == 35500  # 355 * 100
+        assert conservative["max_contracts"] == 28  # 1,000,000 // 35,500
+        assert conservative["total_capital_used"] == 994000  # 28 * 35,500
+        assert conservative["remaining_capital"] == 6000  # 1,000,000 - 994,000
+        
+        # Test balanced allocation  
+        balanced = result["strategies"]["balanced"]
+        assert balanced["single_contract_capital"] == 40000  # 400 * 100
+        assert balanced["max_contracts"] == 25  # 1,000,000 // 40,000
+        assert balanced["total_capital_used"] == 1000000  # 25 * 40,000
+        assert balanced["remaining_capital"] == 0  # Perfect utilization
+        
+        # Test aggressive allocation
+        aggressive = result["strategies"]["aggressive"]
+        assert aggressive["single_contract_capital"] == 41000  # 410 * 100
+        assert aggressive["max_contracts"] == 24  # 1,000,000 // 41,000
+        assert aggressive["total_capital_used"] == 984000  # 24 * 41,000
+        assert aggressive["remaining_capital"] == 16000  # 1,000,000 - 984,000
+        
+        # Test summary statistics
+        summary = result["summary"]
+        assert summary["total_strategies"] == 3
+        assert summary["fully_utilized_strategies"] == 3  # All strategies have >90% utilization
+        assert summary["best_strategy_by_utilization"]["profile"] == "balanced"
+        assert summary["best_strategy_by_utilization"]["utilization"] == 100.0
+
 
 class TestCSPParameterValidation:
     """Test suite for CSP parameter validation."""

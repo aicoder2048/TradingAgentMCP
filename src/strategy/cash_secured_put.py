@@ -62,16 +62,18 @@ class CashSecuredPutAnalyzer:
         self.duration = duration.lower()
         self.client = tradier_client or TradierClient()
         
-        # Delta范围基于策略目的
+        # Delta范围扩大以支持三档风险级别筛选
+        # income策略：保守(-0.20 to -0.10)，平衡(-0.30 to -0.20)，激进(-0.40 to -0.30)
+        # discount策略：保守(-0.50 to -0.30)，平衡(-0.60 to -0.50)，激进(-0.75 to -0.60)
         self.delta_ranges = {
-            "income": {"min": -0.30, "max": -0.10},      # 收入策略：低分配概率
-            "discount": {"min": -0.70, "max": -0.30}     # 折价策略：接受更高分配风险
+            "income": {"min": -0.40, "max": -0.05},      # 扩大范围支持三档筛选
+            "discount": {"min": -0.75, "max": -0.25}     # 扩大范围支持三档筛选
         }
         
-        # 最小流动性要求
+        # 最小流动性要求（放宽以适应盘前交易）
         self.min_open_interest = 50
-        self.min_volume = 10
-        self.max_bid_ask_spread_pct = 0.15  # 15%
+        self.min_volume = 0  # 改为0，盘前volume通常为0
+        self.max_bid_ask_spread_pct = 0.20  # 放宽到20%
         
     async def find_optimal_strikes(
         self,
@@ -329,16 +331,34 @@ class CashSecuredPutAnalyzer:
     
     def _is_valid_option(self, option: OptionContract) -> bool:
         """验证期权是否满足基本要求"""
-        return (
-            option.strike is not None and
-            option.bid is not None and
-            option.ask is not None and
-            option.bid > 0 and
-            option.ask > 0 and
-            (option.open_interest or 0) >= self.min_open_interest and
-            (option.volume or 0) >= self.min_volume and
-            (option.ask - option.bid) / ((option.ask + option.bid) / 2) <= self.max_bid_ask_spread_pct
-        )
+        # 基本数据完整性检查
+        if not (option.strike is not None and
+                option.bid is not None and
+                option.ask is not None and
+                option.bid > 0 and
+                option.ask > 0):
+            return False
+        
+        # 流动性检查：open_interest OR volume（逻辑或，更宽松）
+        oi = option.open_interest or 0
+        volume = option.volume or 0
+        
+        # 只要满足以下任一条件即可：
+        # 1. open_interest >= min_open_interest
+        # 2. volume >= min_volume (如果min_volume > 0)
+        liquidity_ok = (oi >= self.min_open_interest) or (self.min_volume > 0 and volume >= self.min_volume)
+        
+        if not liquidity_ok:
+            return False
+        
+        # 价差检查
+        mid_price = (option.ask + option.bid) / 2
+        if mid_price <= 0:
+            return False
+            
+        spread_pct = (option.ask - option.bid) / mid_price
+        
+        return spread_pct <= self.max_bid_ask_spread_pct
     
     def _calculate_liquidity_score(self, option: OptionContract) -> float:
         """计算流动性评分 (0-100)"""
@@ -631,6 +651,88 @@ RISK DISCLAIMER:
 • Cash secured puts require 100% cash collateral
 • Assignment can occur at any time before expiration
 • Monitor delta changes and market conditions daily
+"""
+        return order_block
+
+    
+    def format_multi_contract_order(
+        self,
+        recommendation: Dict[str, Any], 
+        contract_count: int,
+        total_capital: float,
+        account_info: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        生成多合约订单格式（适用于大资金量）
+        
+        Args:
+            recommendation: 推荐策略数据
+            contract_count: 合约数量
+            total_capital: 总可用资金
+            account_info: 账户信息 (可选)
+            
+        Returns:
+            格式化的多合约订单字符串
+        """
+        option = recommendation["option_details"]
+        pnl = recommendation["pnl_analysis"]
+        risk = recommendation["risk_metrics"]
+        
+        # 格式化到期日
+        exp_date = datetime.strptime(option["expiration"], "%Y-%m-%d")
+        exp_formatted = exp_date.strftime("%b %d, %Y")
+        
+        # 计算多合约数据
+        total_shares = contract_count * 100
+        total_premium = option["premium"] * contract_count * 100
+        total_capital_required = option["strike_price"] * total_shares
+        total_theta = risk["theta_per_day"] * contract_count
+        effective_return = (total_premium / total_capital_required) * 100
+        
+        # 计算年化收益
+        days_to_expiry = option.get("days_to_expiry", 30)
+        annualized_return = (effective_return * 365) / days_to_expiry
+        
+        order_block = f"""
+╔══════════════════════════════════════════════════════════╗
+║                 CASH SECURED PUT ORDER                   ║
+╠══════════════════════════════════════════════════════════╣
+║ Symbol:        {option['symbol']:<43} ║
+║ Action:        SELL TO OPEN                              ║
+║ Quantity:      {contract_count} CONTRACTS ({total_shares:,} SHARES)               ║
+║ Order Type:    LIMIT                                     ║
+║ Strike:        ${option['strike_price']:<6.2f}                             ║
+║ Expiration:    {exp_formatted:<43} ║
+║ Limit Price:   ${option['premium']:<6.2f} (MID: ${option['bid']:.2f}-${option['ask']:.2f})              ║
+╠══════════════════════════════════════════════════════════╣
+║                      P&L ANALYSIS                        ║
+╠══════════════════════════════════════════════════════════╣
+║ Max Profit:    ${total_premium:<8,.2f}                          ║
+║ Breakeven:     ${pnl['breakeven_price']:<8.2f}                          ║
+║ Capital Req:   ${total_capital_required:<8,.0f}                        ║
+║ Return:        {effective_return:<6.2f}% ({annualized_return:.1f}% APR)       ║
+╠══════════════════════════════════════════════════════════╣
+║                    RISK METRICS                          ║
+╠══════════════════════════════════════════════════════════╣
+║ Delta:         {risk['delta']:<8.4f}                              ║
+║ Assign Prob:   {risk['assignment_probability']:<6.1f}%                            ║
+║ Impl Vol:      {risk['implied_volatility']:<6.2%}                        ║
+║ Theta/Day:     ${total_theta:<7.2f}                           ║
+║ Liquidity:     {risk['liquidity_score']:<6.1f}/100                       ║
+╚══════════════════════════════════════════════════════════╝
+
+EXECUTION NOTES:
+• 建议分批执行：先开{min(5, max(1, contract_count//5))}-{min(10, max(1, contract_count//2))}合约测试市场反应
+• 最佳交易时间：9:30-10:30 AM 或 3:00-4:00 PM ET
+• 使用限价单，设置在中间价或略好价格  
+• 设置GTC (Good Till Cancelled) 订单类型
+• 确保账户有足够现金担保：${total_capital_required:,.0f}
+
+RISK MANAGEMENT:
+• 每日监控Delta变化，如超过-0.40考虑调整
+• 设置止损：如损失超过权利金收入50%考虑平仓
+• 股价接近执行价时准备展期或接受股票分配
+• 大仓位建议设置预警：Delta>-0.30时考虑减仓
 """
         return order_block
 

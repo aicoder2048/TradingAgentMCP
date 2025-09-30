@@ -186,7 +186,7 @@ def create_server() -> FastMCP:
         Args:
             symbol: 股票代码 (必需) - 例如 "AAPL", "TSLA", "NVDA"
             purpose_type: 策略目的 - "income" (收入导向) 或 "discount" (折扣购买) (默认 "income")
-            duration: 时间周期 - "1w", "2w", "1m", "3m", "6m", "1y" (默认 "1w")
+            duration: 时间周期 - "1w", "2w", "3w", "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "10m", "11m", "1y", 或 "YYYY-MM-DD" 具体日期 (默认 "1w")
             capital_limit: 资金限制 (可选) - 最大可用资金金额
             include_order_blocks: 是否包含专业订单块 (默认 True)
             min_premium: 最低权利金要求 (可选)

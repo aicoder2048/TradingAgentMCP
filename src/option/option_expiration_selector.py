@@ -10,6 +10,7 @@
 """
 
 import math
+import re
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
@@ -53,49 +54,117 @@ class ExpirationSelectionResult:
 
 # 持续时间映射配置
 DURATION_MAPPINGS = {
-        "1w": {
-            "min_days": 5, 
-            "max_days": 9, 
-            "target_days": 7,
-            "preferred": ExpirationPreference.WEEKLY,
-            "description": "1周期权策略"
-        },
-        "2w": {
-            "min_days": 10, 
-            "max_days": 18, 
-            "target_days": 14,
-            "preferred": ExpirationPreference.WEEKLY,
-            "description": "2周期权策略"
-        },
-        "1m": {
-            "min_days": 25, 
-            "max_days": 35, 
-            "target_days": 30,
-            "preferred": ExpirationPreference.MONTHLY,
-            "description": "1月期权策略"
-        },
-        "3m": {
-            "min_days": 80, 
-            "max_days": 100, 
-            "target_days": 90,
-            "preferred": ExpirationPreference.MONTHLY,
-            "description": "3月期权策略"
-        },
-        "6m": {
-            "min_days": 170, 
-            "max_days": 190, 
-            "target_days": 180,
-            "preferred": ExpirationPreference.QUARTERLY,
-            "description": "6月期权策略"
-        },
-        "1y": {
-            "min_days": 350, 
-            "max_days": 380, 
-            "target_days": 365,
-            "preferred": ExpirationPreference.LEAPS,
-            "description": "1年期权策略(LEAPS)"
-        }
+    # 周级别
+    "1w": {
+        "min_days": 5, 
+        "max_days": 10, 
+        "target_days": 7,
+        "preferred": ExpirationPreference.WEEKLY,
+        "description": "1周期权策略"
+    },
+    "2w": {
+        "min_days": 10, 
+        "max_days": 17, 
+        "target_days": 14,
+        "preferred": ExpirationPreference.WEEKLY,
+        "description": "2周期权策略"
+    },
+    "3w": {
+        "min_days": 17, 
+        "max_days": 24, 
+        "target_days": 21,
+        "preferred": ExpirationPreference.WEEKLY,
+        "description": "3周期权策略"
+    },
+    
+    # 月级别
+    "1m": {
+        "min_days": 21, 
+        "max_days": 35, 
+        "target_days": 30,
+        "preferred": ExpirationPreference.MONTHLY,
+        "description": "1月期权策略"
+    },
+    "2m": {
+        "min_days": 35, 
+        "max_days": 50, 
+        "target_days": 45,
+        "preferred": ExpirationPreference.MONTHLY,
+        "description": "2月期权策略"
+    },
+    "3m": {
+        "min_days": 50, 
+        "max_days": 75, 
+        "target_days": 65,
+        "preferred": ExpirationPreference.MONTHLY,
+        "description": "3月期权策略"
+    },
+    "4m": {
+        "min_days": 75, 
+        "max_days": 105, 
+        "target_days": 90,
+        "preferred": ExpirationPreference.MONTHLY,
+        "description": "4月期权策略"
+    },
+    "5m": {
+        "min_days": 105, 
+        "max_days": 135, 
+        "target_days": 120,
+        "preferred": ExpirationPreference.MONTHLY,
+        "description": "5月期权策略"
+    },
+    "6m": {
+        "min_days": 135, 
+        "max_days": 165, 
+        "target_days": 150,
+        "preferred": ExpirationPreference.QUARTERLY,
+        "description": "6月期权策略"
+    },
+    "7m": {
+        "min_days": 165, 
+        "max_days": 195, 
+        "target_days": 180,
+        "preferred": ExpirationPreference.QUARTERLY,
+        "description": "7月期权策略"
+    },
+    "8m": {
+        "min_days": 195, 
+        "max_days": 225, 
+        "target_days": 210,
+        "preferred": ExpirationPreference.QUARTERLY,
+        "description": "8月期权策略"
+    },
+    "9m": {
+        "min_days": 225, 
+        "max_days": 255, 
+        "target_days": 240,
+        "preferred": ExpirationPreference.QUARTERLY,
+        "description": "9月期权策略"
+    },
+    "10m": {
+        "min_days": 255, 
+        "max_days": 285, 
+        "target_days": 270,
+        "preferred": ExpirationPreference.QUARTERLY,
+        "description": "10月期权策略"
+    },
+    "11m": {
+        "min_days": 285, 
+        "max_days": 315, 
+        "target_days": 300,
+        "preferred": ExpirationPreference.QUARTERLY,
+        "description": "11月期权策略"
+    },
+    
+    # 年级别
+    "1y": {
+        "min_days": 315, 
+        "max_days": 400, 
+        "target_days": 365,
+        "preferred": ExpirationPreference.LEAPS,
+        "description": "1年期权策略(LEAPS)"
     }
+}
 
 
 class ExpirationSelector:
@@ -117,6 +186,141 @@ class ExpirationSelector:
         self.liquidity_weight = 0.4
         self.distance_weight = 0.4
         self.preference_weight = 0.2
+
+    def _parse_duration(self, duration: str) -> Tuple[str, Optional[date]]:
+        """
+        解析duration参数，支持预定义持续时间和具体日期
+        
+        Args:
+            duration: 持续时间字符串 ("1w", "2w", "1m", 等) 或具体日期 ("2025-10-03")
+            
+        Returns:
+            Tuple[解析类型, 目标日期或None]
+            - 如果是预定义持续时间: ("duration", None)
+            - 如果是具体日期: ("specific_date", date对象)
+            
+        Raises:
+            ValueError: 如果格式不支持
+        """
+        # 检查是否为YYYY-MM-DD格式的具体日期
+        date_pattern = r'^\d{4}-\d{2}-\d{2}$'
+        if re.match(date_pattern, duration):
+            try:
+                # 解析日期字符串
+                target_date = datetime.strptime(duration, '%Y-%m-%d').date()
+                
+                # 验证日期不能是过去
+                today = date.today()
+                if target_date <= today:
+                    raise ValueError(f"目标日期 {duration} 不能是过去或今天，当前日期: {today}")
+                
+                # 验证日期不能太遥远（超过2年）
+                max_future_date = today + timedelta(days=730)  # 2年
+                if target_date > max_future_date:
+                    raise ValueError(f"目标日期 {duration} 过于遥远，最大支持2年内的日期")
+                
+                return ("specific_date", target_date)
+                
+            except ValueError as e:
+                if "time data" in str(e):
+                    raise ValueError(f"无效的日期格式: {duration}，请使用 YYYY-MM-DD 格式")
+                else:
+                    # 重新抛出我们自己的错误消息
+                    raise
+        
+        # 检查是否为预定义持续时间
+        elif duration in DURATION_MAPPINGS:
+            return ("duration", None)
+        
+        else:
+            # 提供更友好的错误消息
+            supported_durations = list(DURATION_MAPPINGS.keys())
+            raise ValueError(
+                f"不支持的持续时间格式: {duration}\n"
+                f"支持的预定义持续时间: {supported_durations}\n"
+                f"或使用具体日期格式: YYYY-MM-DD (例: 2025-10-03)"
+            )
+
+    def _find_closest_expiration(
+        self, 
+        target_date: date, 
+        available_expirations: List[OptionExpiration]
+    ) -> Tuple[OptionExpiration, str]:
+        """
+        为具体目标日期找到最接近的可用期权到期日
+        
+        Args:
+            target_date: 目标日期
+            available_expirations: 可用的期权到期日列表
+            
+        Returns:
+            Tuple[最接近的到期日, 选择理由]
+            
+        Raises:
+            ValueError: 如果没有找到合适的到期日
+        """
+        if not available_expirations:
+            raise ValueError("没有可用的期权到期日")
+        
+        today = date.today()
+        target_days = (target_date - today).days
+        
+        # 计算每个到期日与目标日期的距离
+        candidates = []
+        for exp in available_expirations:
+            exp_date = datetime.strptime(exp.date, '%Y-%m-%d').date()
+            exp_days = (exp_date - today).days
+            
+            # 只考虑未来的日期
+            if exp_days <= 0:
+                continue
+                
+            distance = abs(exp_days - target_days)
+            candidates.append({
+                'expiration': exp,
+                'date': exp_date,
+                'days': exp_days,
+                'distance': distance,
+                'is_exact': distance == 0,
+                'is_before': exp_days < target_days,
+                'is_after': exp_days > target_days
+            })
+        
+        if not candidates:
+            raise ValueError("没有找到未来的期权到期日")
+        
+        # 按距离排序，但同时考虑期权策略的安全性（稍后的日期更安全）
+        min_distance = min(c['distance'] for c in candidates)
+        
+        def smart_sort_key(candidate):
+            # 主要按距离排序，但强烈偏向选择稍后的日期（期权策略更安全）
+            distance = candidate['distance']
+            # 对于距离合理的候选者（差距在10天以内），稍后的日期得到显著优势
+            if distance <= min_distance + 10:
+                if candidate['is_after']:
+                    # 给予稍后日期很大的优先级提升
+                    distance -= 6.0
+                else:
+                    # 对稍早日期施加小惩罚
+                    distance += 1.0
+            return distance
+        
+        candidates.sort(key=smart_sort_key)
+        
+        # 选择策略：
+        # 1. 如果有精确匹配，选择它
+        # 2. 否则选择经过智能排序后的第一个候选者
+        best_candidate = candidates[0]
+        
+        # 生成选择理由
+        if best_candidate['is_exact']:
+            reason = f"找到精确匹配的到期日 {best_candidate['date']}"
+        else:
+            direction = "之后" if best_candidate['is_after'] else "之前"
+            reason = (f"选择距离目标日期 {target_date} 最近的到期日 {best_candidate['date']} "
+                     f"({direction}{best_candidate['distance']}天)")
+        
+        return best_candidate['expiration'], reason
     
     async def get_optimal_expiration(
         self,
@@ -129,17 +333,14 @@ class ExpirationSelector:
         
         Args:
             symbol: 股票代码
-            duration: 持续时间 ("1w", "2w", "1m", "3m", "6m", "1y")
+            duration: 持续时间 ("1w", "2w", "1m", "3m", "6m", "1y") 或具体日期 ("2025-10-03")
             preference_override: 偏好覆盖 (可选)
             
         Returns:
             到期日选择结果
         """
-        if duration not in DURATION_MAPPINGS:
-            raise ValueError(f"不支持的持续时间: {duration}")
-        
-        mapping = DURATION_MAPPINGS[duration]
-        preference = preference_override or mapping["preferred"]
+        # 解析duration参数
+        duration_type, target_date = self._parse_duration(duration)
         
         # 获取所有可用到期日
         expirations = self.client.get_option_expirations(
@@ -149,37 +350,68 @@ class ExpirationSelector:
             include_details=True
         )
         
-        # 生成候选者
-        candidates = await self._generate_candidates(
-            symbol, expirations, mapping, preference
-        )
+        if duration_type == "specific_date":
+            # 处理具体日期情况
+            best_expiration, reason = self._find_closest_expiration(target_date, expirations)
+            
+            # 计算天数
+            today = date.today()
+            exp_date = datetime.strptime(best_expiration.date, '%Y-%m-%d').date()
+            actual_days = (exp_date - today).days
+            
+            # 准备元数据
+            metadata = {
+                "duration": duration,
+                "target_date": target_date.strftime('%Y-%m-%d'),
+                "actual_days": actual_days,
+                "expiration_type": getattr(best_expiration, 'expiration_type', 'unknown'),
+                "selection_method": "specific_date_matching",
+                "distance_from_target": abs((exp_date - target_date).days)
+            }
+            
+            return ExpirationSelectionResult(
+                selected_date=best_expiration.date,
+                selection_reason=reason,
+                metadata=metadata,
+                alternatives=[]  # 对于具体日期，我们只返回最佳匹配
+            )
         
-        if not candidates:
-            raise ValueError(f"未找到符合{duration}要求的期权到期日")
-        
-        # 选择最优候选者
-        best_candidate = max(candidates, key=lambda x: x.final_score)
-        
-        # 生成选择理由
-        reason = self._generate_selection_reason(best_candidate, mapping, preference)
-        
-        # 准备元数据
-        metadata = {
-            "duration": duration,
-            "target_days": mapping["target_days"],
-            "actual_days": best_candidate.days_to_expiry,
-            "expiration_type": best_candidate.expiration_type,
-            "liquidity_score": best_candidate.liquidity_score,
-            "preference_used": preference.value,
-            "total_candidates": len(candidates)
-        }
-        
-        return ExpirationSelectionResult(
-            selected_date=best_candidate.date,
-            selection_reason=reason,
-            metadata=metadata,
-            alternatives=sorted(candidates, key=lambda x: x.final_score, reverse=True)[1:6]
-        )
+        else:
+            # 处理预定义持续时间情况 (原有逻辑)
+            mapping = DURATION_MAPPINGS[duration]
+            preference = preference_override or mapping["preferred"]
+            
+            # 生成候选者
+            candidates = await self._generate_candidates(
+                symbol, expirations, mapping, preference
+            )
+            
+            if not candidates:
+                raise ValueError(f"未找到符合{duration}要求的期权到期日")
+            
+            # 选择最优候选者
+            best_candidate = max(candidates, key=lambda x: x.final_score)
+            
+            # 生成选择理由
+            reason = self._generate_selection_reason(best_candidate, mapping, preference)
+            
+            # 准备元数据
+            metadata = {
+                "duration": duration,
+                "target_days": mapping["target_days"],
+                "actual_days": best_candidate.days_to_expiry,
+                "expiration_type": best_candidate.expiration_type,
+                "liquidity_score": best_candidate.liquidity_score,
+                "preference_used": preference.value,
+                "total_candidates": len(candidates)
+            }
+            
+            return ExpirationSelectionResult(
+                selected_date=best_candidate.date,
+                selection_reason=reason,
+                metadata=metadata,
+                alternatives=sorted(candidates, key=lambda x: x.final_score, reverse=True)[1:6]
+            )
     
     async def _generate_candidates(
         self,

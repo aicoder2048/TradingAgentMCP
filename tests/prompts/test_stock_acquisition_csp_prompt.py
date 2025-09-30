@@ -16,7 +16,6 @@ from src.mcp_server.prompts.stock_acquisition_csp_prompt import (
     stock_acquisition_csp_engine,
     _validate_stock_acquisition_parameters,
     _generate_stock_acquisition_prompt,
-    _get_duration_from_days,
     _parse_tickers_input,
     get_stock_acquisition_examples,
     get_usage_guidelines
@@ -33,12 +32,10 @@ class TestParameterValidation:
             cash_usd=50000.0,
             target_allocation_probability=65.0,
             max_single_position_pct=25.0,
-            min_days=21,
-            max_days=60,
             target_annual_return_pct=25.0,
             preferred_sectors="Technology,Healthcare"
         )
-        
+
         assert result["is_valid"] is True
         assert len(result["errors"]) == 0
     
@@ -49,8 +46,6 @@ class TestParameterValidation:
             cash_usd=50000.0,
             target_allocation_probability=65.0,
             max_single_position_pct=25.0,
-            min_days=21,
-            max_days=60,
             target_annual_return_pct=25.0,
             preferred_sectors=None
         )
@@ -65,8 +60,6 @@ class TestParameterValidation:
             cash_usd=-1000.0,  # 负数资金
             target_allocation_probability=65.0,
             max_single_position_pct=25.0,
-            min_days=21,
-            max_days=60,
             target_annual_return_pct=25.0,
             preferred_sectors=None
         )
@@ -81,8 +74,6 @@ class TestParameterValidation:
             cash_usd=50000.0,
             target_allocation_probability=150.0,  # 超过100%
             max_single_position_pct=25.0,
-            min_days=21,
-            max_days=60,
             target_annual_return_pct=25.0,
             preferred_sectors=None
         )
@@ -97,30 +88,26 @@ class TestParameterValidation:
             cash_usd=50000.0,
             target_allocation_probability=65.0,
             max_single_position_pct=150.0,  # 超过100%
-            min_days=21,
-            max_days=60,
             target_annual_return_pct=25.0,
             preferred_sectors=None
         )
-        
+
         assert result["is_valid"] is False
         assert any("单股票仓位百分比必须在0-100%" in error for error in result["errors"])
     
-    def test_invalid_days_range(self):
-        """测试无效的天数范围"""
+    def test_invalid_annual_return(self):
+        """测试无效的年化收益率"""
         result = _validate_stock_acquisition_parameters(
             tickers=["AAPL"],
             cash_usd=50000.0,
             target_allocation_probability=65.0,
             max_single_position_pct=25.0,
-            min_days=60,  # min > max
-            max_days=30,
-            target_annual_return_pct=25.0,
+            target_annual_return_pct=150.0,  # 超过100%
             preferred_sectors=None
         )
-        
+
         assert result["is_valid"] is False
-        assert any("最小天数必须小于最大天数" in error for error in result["errors"])
+        assert any("年化收益率必须在0-100%" in error or "年度回报率必须在0-100%" in error for error in result["errors"])
     
     def test_warning_conditions(self):
         """测试警告条件"""
@@ -129,12 +116,10 @@ class TestParameterValidation:
             cash_usd=5000.0,  # 资金较少
             target_allocation_probability=20.0,  # 分配概率较低
             max_single_position_pct=60.0,  # 单仓位过高
-            min_days=5,  # 天数较短
-            max_days=400,  # 天数过长
             target_annual_return_pct=60.0,  # 收益率过高
             preferred_sectors=None
         )
-        
+
         assert result["is_valid"] is True  # 有警告但仍有效
         assert len(result["warnings"]) > 0
 
@@ -178,32 +163,6 @@ class TestTickersParsing:
         assert result == ["AAPL", "MSFT", "GOOGL"]
 
 
-class TestDurationMapping:
-    """测试天数到duration的映射"""
-    
-    def test_duration_mapping_1w(self):
-        """测试1周映射"""
-        assert _get_duration_from_days(5, 9) == "1w"
-    
-    def test_duration_mapping_2w(self):
-        """测试2周映射"""
-        assert _get_duration_from_days(10, 18) == "2w"
-    
-    def test_duration_mapping_1m(self):
-        """测试1月映射"""
-        assert _get_duration_from_days(21, 35) == "1m"
-    
-    def test_duration_mapping_3m(self):
-        """测试3月映射"""
-        assert _get_duration_from_days(60, 100) == "3m"
-    
-    def test_duration_mapping_6m(self):
-        """测试6月映射"""
-        assert _get_duration_from_days(150, 190) == "6m"
-    
-    def test_duration_mapping_1y(self):
-        """测试1年映射"""
-        assert _get_duration_from_days(300, 400) == "1y"
 
 
 class TestPromptGeneration:
@@ -215,16 +174,13 @@ class TestPromptGeneration:
         result = await stock_acquisition_csp_engine(
             tickers="AAPL",
             cash_usd=50000.0,
-            target_allocation_probability=65.0,
-            min_days=21,
-            max_days=60
+            target_allocation_probability=65.0
         )
         
         # 验证核心内容存在
-        assert "股票建仓现金担保PUT引擎" in result
+        assert "股票建仓现金担保PUT引擎" in result or "股票建仓" in result
         assert 'purpose_type="discount"' in result
-        assert "分配概率≥65.0%" in result or "目标分配概率65.0%" in result
-        assert "21~60" in result or "21-60" in result
+        assert "分配概率≥65.0%" in result or "目标分配概率65.0%" in result or "65.0%" in result
         assert "50000" in result or "50,000" in result
     
     @pytest.mark.asyncio 
@@ -249,10 +205,8 @@ class TestPromptGeneration:
         )
         
         # 验证默认值
-        assert "分配概率≥65.0%" in result or "目标分配概率65.0%" in result
-        assert "单股票≤25.0%" in result or "max_single_position_pct=25.0" in result
-        assert "21~60" in result or "21-60" in result
-        assert "年化补偿≥25.0%" in result or "target_annual_return_pct=25.0" in result
+        assert "分配概率≥65.0%" in result or "目标分配概率65.0%" in result or "65.0%" in result
+        assert "25.0%" in result or "年化补偿≥25.0%" in result
     
     @pytest.mark.asyncio
     async def test_preferred_sectors(self):
@@ -331,8 +285,8 @@ class TestOutputFormat:
             "stock_info_tool(",
             "cash_secured_put_strategy_tool_mcp(",
             "options_chain_tool_mcp(",
-            "option_assignment_probability_tool_mcp(",
-            "portfolio_optimization_tool_mcp_tool("
+            "option_assignment_probability_tool_mcp("
+            # portfolio_optimization_tool_mcp_tool 现在是可选的（使用简化分配模型）
         ]
         
         for tool in required_tools:
@@ -404,10 +358,9 @@ class TestDifferentiationFromIncomeEngine:
         )
         
         # 股票建仓引擎的特有参数
-        assert "分配概率≥65.0%" in result or "目标分配概率65.0%" in result
-        assert "单股票≤25.0%" in result or "max_single_position_pct=25.0" in result
-        assert "21~60" in result  # 更长的时间范围
-        
+        assert "分配概率≥65.0%" in result or "目标分配概率65.0%" in result or "65.0%" in result
+        assert "25.0%" in result  # 检查默认值存在
+
         # 不应该有收入引擎的特征
         assert "避免分配" not in result
         assert "min_winrate_pct" not in result

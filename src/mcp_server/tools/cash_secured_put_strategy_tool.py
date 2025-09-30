@@ -50,12 +50,22 @@ async def cash_secured_put_strategy_tool(
             - "income": 收入策略，Delta 10-30%，专注于权利金收取
             - "discount": 折价策略，Delta 30-70%，接受分配风险以折价买入
         duration: 时间跨度
-            - "1w": 1周 (5-9天，偏好周度期权)
-            - "2w": 2周 (10-18天，偏好周度期权)  
-            - "1m": 1月 (25-35天，偏好月度期权)
-            - "3m": 3月 (80-100天，偏好月度期权)
-            - "6m": 6月 (170-190天，偏好季度期权)
-            - "1y": 1年 (350-380天，LEAPS期权)
+            - "1w": 1周 (5-10天，偏好周度期权)
+            - "2w": 2周 (10-17天，偏好周度期权)  
+            - "3w": 3周 (17-24天，偏好周度期权)
+            - "1m": 1月 (21-35天，偏好月度期权)
+            - "2m": 2月 (35-50天，偏好月度期权)
+            - "3m": 3月 (50-75天，偏好月度期权)
+            - "4m": 4月 (75-105天，偏好月度期权)
+            - "5m": 5月 (105-135天，偏好月度期权)
+            - "6m": 6月 (135-165天，偏好季度期权)
+            - "7m": 7月 (165-195天，偏好季度期权)
+            - "8m": 8月 (195-225天，偏好季度期权)
+            - "9m": 9月 (225-255天，偏好季度期权)
+            - "10m": 10月 (255-285天，偏好季度期权)
+            - "11m": 11月 (285-315天，偏好季度期权)
+            - "1y": 1年 (315-400天，LEAPS期权)
+            - "YYYY-MM-DD": 具体到期日期 (例如: "2025-01-17")
         capital_limit: 最大资金投入 (可选)
         include_order_blocks: 是否生成专业订单格式
         min_premium: 最小权利金要求 (可选)
@@ -90,6 +100,19 @@ async def cash_secured_put_strategy_tool(
                 "balanced": {...},
                 "aggressive": {...}
             },
+            "capital_allocation": {
+                "available_capital": 1000000,
+                "strategies": {
+                    "conservative": {
+                        "single_contract_capital": 35500,
+                        "max_contracts": 28,
+                        "total_capital_used": 994000,
+                        "total_premium_income": 9870,
+                        "effective_return": 15.1
+                    },
+                    ...
+                }
+            },
             "order_blocks": {
                 "conservative": "专业订单格式...",
                 "balanced": "...",
@@ -120,12 +143,24 @@ async def cash_secured_put_strategy_tool(
                 "message": "目的类型必须是 'income' 或 'discount'"
             }
         
-        if duration not in ["1w", "2w", "1m", "3m", "6m", "1y"]:
+        # 支持的duration参数 - 与DURATION_MAPPINGS同步
+        valid_durations = [
+            "1w", "2w", "3w",  # 周级别
+            "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "10m", "11m",  # 月级别
+            "1y"  # 年级别
+        ]
+        
+        # 检查是否为具体日期格式 (YYYY-MM-DD)
+        import re
+        date_pattern = r'^\d{4}-\d{2}-\d{2}$'
+        is_specific_date = re.match(date_pattern, duration)
+        
+        if not is_specific_date and duration not in valid_durations:
             return {
                 "symbol": symbol, 
                 "status": "error",
                 "error": "invalid_duration",
-                "message": "持续时间必须是 '1w', '2w', '1m', '3m', '6m', '1y' 之一"
+                "message": f"持续时间必须是以下之一: {', '.join(valid_durations)}，或者YYYY-MM-DD格式的具体日期 (例如: '2025-01-17')"
             }
         
         # 初始化组件
@@ -236,6 +271,15 @@ async def cash_secured_put_strategy_tool(
         
         print(f"📊 生成了 {len(recommendations)} 个策略推荐")
         
+        # 计算资金分配（新增功能）
+        capital_allocation = None
+        if capital_limit and capital_limit > 0:
+            print(f"💰 计算 ${capital_limit:,.0f} 资金分配方案...")
+            capital_allocation = calculate_capital_allocation(
+                recommendations=recommendations,
+                available_capital=capital_limit
+            )
+        
         # 生成专业订单格式
         order_blocks = {}
         if include_order_blocks:
@@ -243,7 +287,14 @@ async def cash_secured_put_strategy_tool(
             formatter = ProfessionalOrderFormatter()
             for profile, rec in recommendations.items():
                 try:
-                    order_blocks[profile] = formatter.format_order_block(rec)
+                    # 如果有资金分配，使用多合约格式
+                    if capital_allocation and profile in capital_allocation["strategies"]:
+                        contract_count = capital_allocation["strategies"][profile]["max_contracts"]
+                        order_blocks[profile] = formatter.format_multi_contract_order(
+                            rec, contract_count, capital_allocation["available_capital"]
+                        )
+                    else:
+                        order_blocks[profile] = formatter.format_order_block(rec)
                 except Exception as e:
                     print(f"⚠️ 生成{profile}订单格式时出错: {e}")
                     order_blocks[profile] = f"订单格式生成错误: {str(e)}"
@@ -285,6 +336,7 @@ async def cash_secured_put_strategy_tool(
                 "alternative_count": len(expiration_result.alternatives)
             },
             "recommendations": recommendations,
+            "capital_allocation": capital_allocation,  # 新增字段
             "order_blocks": order_blocks if include_order_blocks else None,
             "market_context": market_context,
             "execution_notes": execution_notes,
@@ -484,3 +536,100 @@ def format_strategy_summary(result: Dict[str, Any]) -> str:
         summary_lines.extend(["", "📋 执行要点:", execution_notes])
     
     return "\n".join(summary_lines)
+
+
+def calculate_capital_allocation(
+    recommendations: Dict[str, Dict],
+    available_capital: float
+) -> Dict[str, Any]:
+    """
+    计算给定资金量下的资金分配方案
+    
+    Args:
+        recommendations: 策略推荐结果字典
+        available_capital: 可用资金总额
+        
+    Returns:
+        资金分配详细方案
+    """
+    allocation_result = {
+        "available_capital": available_capital,
+        "strategies": {},
+        "summary": {
+            "total_strategies": len(recommendations),
+            "fully_utilized_strategies": 0,
+            "best_strategy_by_utilization": None,
+            "best_strategy_by_return": None
+        }
+    }
+    
+    for profile, rec in recommendations.items():
+        option_details = rec["option_details"]
+        strike_price = option_details["strike_price"]
+        premium = option_details["premium"]
+        
+        # 每个合约需要的资金 = 执行价 × 100
+        single_contract_capital = strike_price * 100
+        
+        # 计算最大可开合约数
+        max_contracts = int(available_capital // single_contract_capital)
+        
+        if max_contracts > 0:
+            # 实际使用的资金
+            total_capital_used = max_contracts * single_contract_capital
+            
+            # 总权利金收入
+            total_premium_income = max_contracts * premium * 100
+            
+            # 计算有效收益率
+            effective_return = (total_premium_income / total_capital_used) * 100
+            
+            # 计算年化收益率
+            days_to_expiry = option_details.get("days_to_expiry", 30)
+            annualized_return = (effective_return * 365) / days_to_expiry
+            
+            strategy_allocation = {
+                "single_contract_capital": single_contract_capital,
+                "max_contracts": max_contracts,
+                "total_capital_used": total_capital_used,
+                "remaining_capital": available_capital - total_capital_used,
+                "capital_utilization": (total_capital_used / available_capital) * 100,
+                "total_premium_income": total_premium_income,
+                "effective_return": effective_return,
+                "annualized_return": annualized_return,
+                "assignment_probability": rec["risk_metrics"]["assignment_probability"],
+                "risk_level": option_details.get("risk_assessment", "未知"),
+                "delta": option_details.get("delta", 0),
+                "theta_per_day": rec["risk_metrics"].get("theta_per_day", 0) * max_contracts
+            }
+            
+            allocation_result["strategies"][profile] = strategy_allocation
+            
+            # 更新统计信息
+            if strategy_allocation["capital_utilization"] > 90:
+                allocation_result["summary"]["fully_utilized_strategies"] += 1
+    
+    # 找到最佳策略
+    if allocation_result["strategies"]:
+        # 按资金利用率排序
+        best_utilization = max(
+            allocation_result["strategies"].items(),
+            key=lambda x: x[1]["capital_utilization"]
+        )
+        allocation_result["summary"]["best_strategy_by_utilization"] = {
+            "profile": best_utilization[0],
+            "utilization": best_utilization[1]["capital_utilization"]
+        }
+        
+        # 按年化收益率排序
+        best_return = max(
+            allocation_result["strategies"].items(),
+            key=lambda x: x[1]["annualized_return"]
+        )
+        allocation_result["summary"]["best_strategy_by_return"] = {
+            "profile": best_return[0],
+            "return": best_return[1]["annualized_return"]
+        }
+    
+    return allocation_result
+
