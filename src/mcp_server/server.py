@@ -504,8 +504,6 @@ def create_server() -> FastMCP:
     async def income_generation_csp_engine_prompt(
         tickers: str,  # 简化：只接受字符串，内部处理所有格式
         cash_usd: Union[float, int, str],  # 修复: 支持多种数值类型
-        min_days: int = 7,
-        max_days: int = 28,
         target_apy_pct: Union[float, int] = 50,  # 修复: 支持整数和浮点数
         min_winrate_pct: Union[float, int] = 70,  # 修复: 支持整数和浮点数
         confidence_pct: Union[float, int] = 90,   # 修复: 支持整数和浮点数
@@ -525,8 +523,6 @@ def create_server() -> FastMCP:
                 - Single ticker: "TSLA"
                 (default: [\"SPY\", \"QQQ\", \"AAPL\", \"MSFT\", \"NVDA\"])
             cash_usd: Available capital for strategies (accepts int, float, or string)
-            min_days: Minimum days to expiration (default: 7)
-            max_days: Maximum days to expiration (default: 28)
             target_apy_pct: Target annualized percentage yield (default: 50%)
             min_winrate_pct: Minimum target win rate (default: 70%)
             confidence_pct: Statistical confidence level (default: 90%)
@@ -541,8 +537,6 @@ def create_server() -> FastMCP:
             debug_mcp_entry(
                 tickers,
                 cash_usd=cash_usd,
-                min_days=min_days,
-                max_days=max_days,
                 target_apy_pct=target_apy_pct,
                 min_winrate_pct=min_winrate_pct,
                 confidence_pct=confidence_pct
@@ -565,8 +559,6 @@ def create_server() -> FastMCP:
         return await income_generation_csp_engine(
             tickers=tickers,  # 现在直接传递字符串
             cash_usd=cash_usd,
-            min_days=min_days,
-            max_days=max_days,
             target_apy_pct=target_apy_pct,
             min_winrate_pct=min_winrate_pct,
             confidence_pct=confidence_pct
