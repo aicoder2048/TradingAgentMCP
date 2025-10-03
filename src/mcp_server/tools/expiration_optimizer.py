@@ -277,18 +277,21 @@ class ExpirationOptimizer:
                                available_expirations: List[Dict[str, Any]],
                                symbol: str = "",
                                volatility: float = 0.3,
-                               strategy_type: str = "csp") -> ExpirationCandidate:
+                               strategy_type: str = "csp",
+                               return_process: bool = False) -> Tuple[ExpirationCandidate, Optional[Dict[str, Any]]]:
         """
         从可用到期日中找出最优选择
-        
+
         Args:
             available_expirations: 可用到期日列表
             symbol: 股票代码（用于日志）
             volatility: 当前隐含波动率
             strategy_type: 策略类型（csp, covered_call等）
-        
+            return_process: 是否返回完整优化过程
+
         Returns:
-            最优到期日
+            如果return_process=False: 最优到期日
+            如果return_process=True: (最优到期日, 优化过程详情)
         """
         candidates = []
 
@@ -301,42 +304,180 @@ class ExpirationOptimizer:
                 next_earnings_days=exp.get('next_earnings_days')
             )
             candidates.append(candidate)
-        
+
         # 排序并选择最优
         candidates.sort(key=lambda x: x.composite_score, reverse=True)
-        
+
         best = candidates[0]
-        
+
         # 记录决策
         logger.info(f"{symbol} 最优到期日: {best.date} ({best.days_to_expiry}天), "
                    f"评分: {best.composite_score:.1f}, 理由: {best.selection_reason}")
-        
-        return best
+
+        # 如果需要返回优化过程
+        if return_process:
+            process_details = self._generate_optimization_process(candidates, best, symbol)
+            return best, process_details
+
+        return best, None
+
+    def _generate_optimization_process(self,
+                                      all_candidates: List[ExpirationCandidate],
+                                      selected: ExpirationCandidate,
+                                      symbol: str = "") -> Dict[str, Any]:
+        """
+        生成优化过程详情
+
+        Args:
+            all_candidates: 所有候选（已排序）
+            selected: 最终选择
+            symbol: 股票代码
+
+        Returns:
+            优化过程详情字典
+        """
+        # 1. 候选总数
+        total_candidates = len(all_candidates)
+
+        # 2. 筛选标准
+        screening_criteria = {
+            "权重配置": self.weights,
+            "Theta最优区间": f"{self.OPTIMAL_THETA_RANGE[0]}-{self.OPTIMAL_THETA_RANGE[1]}天",
+            "Gamma风险阈值": f"<{self.HIGH_GAMMA_THRESHOLD}天为高风险区",
+            "资金效率上限": f">{self.MAX_EFFICIENT_DAYS}天效率下降"
+        }
+
+        # 3. 所有候选的评分详情（按评分降序）
+        all_evaluations = []
+        for i, candidate in enumerate(all_candidates):
+            all_evaluations.append({
+                "排名": i + 1,
+                "日期": candidate.date,
+                "天数": candidate.days_to_expiry,
+                "类型": candidate.type,
+                "综合评分": round(candidate.composite_score, 2),
+                "Theta效率": round(candidate.theta_efficiency, 2),
+                "Gamma风险控制": round(candidate.gamma_risk, 2),
+                "流动性": round(candidate.liquidity_score, 2),
+                "是否最优": (candidate.date == selected.date)
+            })
+
+        # 4. 淘汰分析 - 为什么其他候选被淘汰
+        rejections = []
+        for candidate in all_candidates[1:]:  # 跳过第一个（已选择）
+            reasons = []
+
+            # 评分差距
+            score_gap = selected.composite_score - candidate.composite_score
+            if score_gap > 10:
+                reasons.append(f"综合评分低{score_gap:.1f}分")
+            elif score_gap > 5:
+                reasons.append(f"综合评分略低{score_gap:.1f}分")
+
+            # Theta效率对比
+            theta_gap = selected.theta_efficiency - candidate.theta_efficiency
+            if theta_gap > 15:
+                reasons.append(f"Theta效率差距大({theta_gap:.1f}分)")
+
+            # Gamma风险对比
+            if candidate.days_to_expiry < self.HIGH_GAMMA_THRESHOLD:
+                reasons.append(f"Gamma风险过高({candidate.days_to_expiry}天<{self.HIGH_GAMMA_THRESHOLD}天阈值)")
+
+            # 流动性对比
+            liquidity_gap = selected.liquidity_score - candidate.liquidity_score
+            if liquidity_gap > 20:
+                reasons.append(f"流动性显著偏低({liquidity_gap:.1f}分)")
+
+            # 天数不在最优区间
+            if not (self.OPTIMAL_THETA_RANGE[0] <= candidate.days_to_expiry <= self.OPTIMAL_THETA_RANGE[1]):
+                if candidate.days_to_expiry < self.OPTIMAL_THETA_RANGE[0]:
+                    reasons.append(f"天数偏短({candidate.days_to_expiry}天<{self.OPTIMAL_THETA_RANGE[0]}天)")
+                else:
+                    reasons.append(f"天数偏长({candidate.days_to_expiry}天>{self.OPTIMAL_THETA_RANGE[1]}天)")
+
+            if not reasons:
+                reasons.append("综合评分略低于最优选择")
+
+            rejections.append({
+                "日期": candidate.date,
+                "天数": candidate.days_to_expiry,
+                "评分": round(candidate.composite_score, 2),
+                "淘汰原因": "; ".join(reasons)
+            })
+
+        # 5. 最终选择的详细理由
+        selection_details = {
+            "选中日期": selected.date,
+            "到期天数": selected.days_to_expiry,
+            "到期类型": selected.type,
+            "综合评分": round(selected.composite_score, 2),
+            "选择理由": selected.selection_reason,
+            "优势分析": []
+        }
+
+        # 分析为什么这个是最优的
+        if selected.theta_efficiency > 90:
+            selection_details["优势分析"].append(
+                f"✓ Theta效率极佳({selected.theta_efficiency:.1f}/100)，时间衰减收益最大化"
+            )
+        if selected.gamma_risk > 80:
+            selection_details["优势分析"].append(
+                f"✓ Gamma风险可控({selected.gamma_risk:.1f}/100)，Delta稳定性好"
+            )
+        if selected.liquidity_score > 85:
+            selection_details["优势分析"].append(
+                f"✓ 流动性优秀({selected.liquidity_score:.1f}/100)，{selected.type}期权成交活跃"
+            )
+        if self.OPTIMAL_THETA_RANGE[0] <= selected.days_to_expiry <= self.OPTIMAL_THETA_RANGE[1]:
+            selection_details["优势分析"].append(
+                f"✓ 天数处于最优区间({self.OPTIMAL_THETA_RANGE[0]}-{self.OPTIMAL_THETA_RANGE[1]}天)"
+            )
+
+        # 6. 构建完整过程
+        process = {
+            "symbol": symbol,
+            "总候选数": total_candidates,
+            "筛选标准": screening_criteria,
+            "所有候选评估": all_evaluations,
+            "候选淘汰分析": rejections[:5],  # 只显示前5个被淘汰的
+            "最终选择详情": selection_details,
+            "评分方法说明": {
+                "Theta效率": f"基于期权时间衰减理论，{self.OPTIMAL_THETA_RANGE[0]}-{self.OPTIMAL_THETA_RANGE[1]}天为最优平衡点",
+                "Gamma风险": f"到期时间<{self.HIGH_GAMMA_THRESHOLD}天时Gamma急剧上升，Delta波动加大",
+                "流动性": "周期权和月期权通常流动性最佳，便于进出场",
+                "综合评分": f"加权计算: Theta{self.weights['theta_efficiency']:.0%} + Gamma{self.weights['gamma_risk']:.0%} + 流动性{self.weights['liquidity']:.0%} + 事件缓冲{self.weights['event_buffer']:.0%}"
+            }
+        }
+
+        return process
     
-    def batch_optimize(self, 
+    def batch_optimize(self,
                        symbols_data: Dict[str, List[Dict[str, Any]]],
                        volatilities: Optional[Dict[str, float]] = None) -> Dict[str, ExpirationCandidate]:
         """
         批量优化多个股票的到期日选择
-        
+
         Args:
             symbols_data: {symbol: [expiration_list]}
             volatilities: {symbol: volatility}
-        
+
         Returns:
             {symbol: optimal_expiration}
         """
         results = {}
         default_vol = 0.3
-        
+
         for symbol, expirations in symbols_data.items():
             vol = volatilities.get(symbol, default_vol) if volatilities else default_vol
-            results[symbol] = self.find_optimal_expiration(
-                expirations, 
+            # Note: batch_optimize doesn't need process details, so return_process=False
+            optimal, _ = self.find_optimal_expiration(
+                expirations,
                 symbol=symbol,
-                volatility=vol
+                volatility=vol,
+                return_process=False
             )
-        
+            results[symbol] = optimal
+
         return results
     
     def generate_report(self, optimization_results: Dict[str, ExpirationCandidate]) -> str:
@@ -388,23 +529,25 @@ def optimize_expiration_for_symbol(symbol: str,
                                   weights: Optional[Dict] = None) -> Dict[str, Any]:
     """
     为单个股票优化到期日选择
-    
+
     Args:
         symbol: 股票代码
         available_expirations: 可用到期日列表
         volatility: 隐含波动率
         weights: 自定义权重
-    
+
     Returns:
         优化结果字典
     """
     optimizer = ExpirationOptimizer(weights)
-    result = optimizer.find_optimal_expiration(
+    # Convenience function doesn't need process details
+    result, _ = optimizer.find_optimal_expiration(
         available_expirations,
         symbol=symbol,
-        volatility=volatility
+        volatility=volatility,
+        return_process=False
     )
-    
+
     return {
         'symbol': symbol,
         'optimal_expiration': result.date,

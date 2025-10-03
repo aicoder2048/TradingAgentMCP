@@ -95,12 +95,13 @@ class OptimalExpirationSelectorTool:
                 strategy_weights = self._get_strategy_weights(strategy_type)
                 optimizer = ExpirationOptimizer(strategy_weights)
             
-            # 执行优化
-            optimal = optimizer.find_optimal_expiration(
+            # 执行优化（启用详细过程）
+            optimal, optimization_process = optimizer.find_optimal_expiration(
                 formatted_expirations,
                 symbol=symbol,
                 volatility=volatility,
-                strategy_type=strategy_type
+                strategy_type=strategy_type,
+                return_process=True
             )
             
             # 生成对比分析
@@ -137,9 +138,13 @@ class OptimalExpirationSelectorTool:
                     'weights_used': optimizer.weights
                 },
                 'recommendation': self._generate_recommendation(optimal, strategy_type),
+
+                # 新增：完整优化过程
+                'optimization_process': optimization_process,
+
                 'timestamp': datetime.now().isoformat()
             }
-            
+
             return result
             
         except Exception as e:

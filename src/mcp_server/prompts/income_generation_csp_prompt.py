@@ -224,24 +224,43 @@ stock_history_tool(symbol="{primary_ticker}", date_range="3m", interval="daily",
 ```
 # 智能选择最优到期日 - 专门针对收入生成CSP策略优化
 # 使用专门的收入导向策略主题，自动优化7-21天范围
-optimal_expiration_selector_tool_mcp(
+# ⚠️ 重要：该工具现在返回完整的优化过程详情
+optimal_expiration_result = optimal_expiration_selector_tool_mcp(
     symbol="{primary_ticker}",
-    strategy_type="income_gen_csp_theme",  # 专门的收入生成CSP策略主题
-    volatility=None  # 自动检测当前隐含波动率，权重由策略主题自动配置
+    strategy_type="csp",  # CSP策略类型（收入导向权重已内置）
+    volatility=None  # 自动检测当前隐含波动率
 )
+
+# 📊 优化过程分析（新增功能）
+# optimal_expiration_result 包含以下关键信息：
+# - optimal_expiration: 最优到期日详情
+# - optimization_process: 完整优化过程，包括：
+#   * 总候选数: 可用到期日数量
+#   * 筛选标准: 权重配置和阈值
+#   * 所有候选评估: 完整排名表和评分详情
+#   * 候选淘汰分析: 被淘汰原因详解（前5个）
+#   * 最终选择详情: 选中理由和优势分析
+#   * 评分方法说明: 计算原理说明
+
+# 💡 请展示优化过程的关键信息：
+# 1. 显示所有候选的评分排名（至少前3名）
+# 2. 说明为什么选择了这个到期日（优势分析）
+# 3. 解释被淘汰候选的原因（帮助用户理解决策过程）
 ```
 
 ### 第四步: 收入导向CSP策略生成
-⚠️ **关键**: 使用第三步智能优化器的结果，不要硬编码duration参数
+⚠️ **关键**: 直接使用第三步智能优化器选择的具体日期
 ```
-# 基于智能优化器推荐的到期日，手动计算对应的duration参数
-# 例如: 如果optimal_expiration_selector推荐21天，应该使用"1m"
-# 7-14天 -> "1w", 14-21天 -> "2w", 21-45天 -> "1m", 等等
+# 📊 从优化结果中提取最优到期日
+optimal_date = optimal_expiration_result['optimal_expiration']['date']
 
+# 🎯 直接使用智能优化器选择的具体日期执行CSP策略分析
+# ⚠️ 重要变更: duration参数支持YYYY-MM-DD格式的具体日期
+# 这样可以确保CSP工具使用与优化器完全相同的到期日
 cash_secured_put_strategy_tool_mcp(
     symbol="{primary_ticker}",
     purpose_type="income",  # 关键: 收入导向策略
-    duration="[根据第三步智能优化结果选择: 1w/2w/1m等]",
+    duration=optimal_date,  # ✅ 直接使用优化器选择的具体日期 (例如: "2025-10-17")
     capital_limit={min(cash_usd * 0.8, 100000)},
     include_order_blocks=true,
     min_premium=1.0,  # 最小权利金要求
@@ -252,9 +271,10 @@ cash_secured_put_strategy_tool_mcp(
 ### 第五步: 期权链深度分析
 ⚠️ **关键**: 使用智能优化器推荐的具体到期日
 ```
+# 🎯 使用优化器选择的到期日
 options_chain_tool_mcp(
     symbol="{primary_ticker}",
-    expiration="[使用第三步返回的optimal_expiration.date]",
+    expiration=optimal_date,  # 使用第三步返回的最优到期日
     option_type="put",
     include_greeks=true
 )
@@ -263,10 +283,11 @@ options_chain_tool_mcp(
 ### 第六步: 分配概率精确计算
 ⚠️ **关键**: 使用智能优化器推荐的具体到期日
 ```
+# 🎯 使用优化器选择的到期日进行精确概率计算
 option_assignment_probability_tool_mcp(
     symbol="{primary_ticker}",
     strike_price="[从第四步获得的推荐执行价]",
-    expiration="[使用第三步返回的optimal_expiration.date]",
+    expiration=optimal_date,  # 使用第三步返回的最优到期日
     option_type="put",
     include_delta_comparison=true
 )
@@ -360,16 +381,22 @@ portfolio_optimization_tool_mcp_tool(
 执行完所有工具后，请提供:
 
 1. **策略有效性确认**: 所有推荐是否满足收入导向目标
-2. **策略主题验证**: 确认使用了 income_gen_csp_theme 并在7-21天最优范围内
+2. **到期日优化过程展示** (NEW - 必需展示):
+   - **候选总览**: 显示所有候选到期日的数量和排名
+   - **前3名对比**: 展示评分最高的3个候选及其评分详情
+   - **选择理由**: 说明为什么选择了这个到期日（优势分析）
+   - **淘汰分析**: 解释前2-3个被淘汰候选的原因
+   - **评分方法**: 简要说明Theta效率、Gamma风险、流动性的评分逻辑
+   - **改进幅度**: 说明相比随机选择提升了多少
 3. **到期日优化验证**: 智能选择器的评分过程、数学推理和选择依据
-3. **分配风险评估**: 每个推荐的具体分配概率
-4. **资金配置建议**: 基于夏普比率的科学化仓位分配
+4. **分配风险评估**: 每个推荐的具体分配概率
+5. **资金配置建议**: 基于夏普比率的科学化仓位分配
    - 明确说明每个股票的配置权重计算方法
    - 展示夏普比率计算过程
    - 解释为什么某些股票获得更高权重
-5. **执行时机建议**: 考虑市场环境的最佳开仓时间
-6. **监控检查点**: 需要日常监控的关键指标
-7. **数学逻辑验证**: 确保所有数学比较和结论正确
+6. **执行时机建议**: 考虑市场环境的最佳开仓时间
+7. **监控检查点**: 需要日常监控的关键指标
+8. **数学逻辑验证**: 确保所有数学比较和结论正确
    - 验证收益率vs目标比较的准确性
    - 避免出现"34.8%超过50%"的逻辑错误
 
