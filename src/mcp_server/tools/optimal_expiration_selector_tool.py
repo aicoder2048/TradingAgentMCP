@@ -80,7 +80,7 @@ class OptimalExpirationSelectorTool:
             
             if not available_expirations:
                 # 如果没有提供，尝试从Tradier获取
-                available_expirations = await self._fetch_available_expirations(symbol)
+                available_expirations = self._fetch_available_expirations(symbol)
                 if not available_expirations:
                     return self._error_response(f"无法获取{symbol}的可用到期日")
             
@@ -192,19 +192,26 @@ class OptimalExpirationSelectorTool:
     def _format_expirations(self, expirations: List[Any]) -> List[Dict[str, Any]]:
         """
         格式化到期日数据
-        
+
         支持多种输入格式：
         - 字符串列表: ['2025-10-31', '2025-11-07', ...]
         - 字典列表: [{'date': '2025-10-31', 'type': 'monthly'}, ...]
         - 混合格式
         """
         formatted = []
-        
+
+        # 修复: 在循环外固定时间基准,避免不一致
+        now = datetime.now()
+
         for exp in expirations:
             if isinstance(exp, str):
                 # 字符串格式，计算天数和类型
-                exp_date = datetime.strptime(exp, "%Y-%m-%d")
-                days = (exp_date - datetime.now()).days
+                try:
+                    exp_date = datetime.strptime(exp, "%Y-%m-%d")
+                    days = (exp_date - now).days
+                except ValueError as e:
+                    logger.error(f"无效的日期格式 '{exp}': {e}")
+                    continue  # 跳过无效日期
                 
                 # 判断到期类型
                 if exp_date.day >= 28 or exp_date.day <= 3:
@@ -224,19 +231,24 @@ class OptimalExpirationSelectorTool:
                 # 字典格式，确保有必需字段
                 if 'date' in exp:
                     if 'days' not in exp:
-                        exp_date = datetime.strptime(exp['date'], "%Y-%m-%d")
-                        exp['days'] = (exp_date - datetime.now()).days
+                        try:
+                            exp_date = datetime.strptime(exp['date'], "%Y-%m-%d")
+                            exp['days'] = (exp_date - now).days
+                        except ValueError as e:
+                            logger.error(f"无效的日期格式 '{exp.get('date')}': {e}")
+                            continue  # 跳过无效日期
                     if 'type' not in exp:
                         exp['type'] = 'other'
                     formatted.append(exp)
         
         return formatted
     
-    async def _fetch_available_expirations(self, symbol: str) -> Optional[List[str]]:
+    def _fetch_available_expirations(self, symbol: str) -> Optional[List[str]]:
         """
         从Tradier获取可用到期日
 
-        注意：这需要实际的Tradier客户端实现
+        注意: 此方法是同步的,因为TradierClient是同步实现。
+        虽然父方法execute()是async(MCP要求),但内部可以安全地调用同步方法。
         """
         if not self.tradier_client:
             # 如果没有客户端，返回None让调用方处理
@@ -244,7 +256,7 @@ class OptimalExpirationSelectorTool:
             return None
 
         try:
-            # 实际调用Tradier API（注意：get_option_expirations是同步方法）
+            # 实际调用Tradier API（同步方法）
             response = self.tradier_client.get_option_expirations(symbol)
             if response:
                 # response是List[OptionExpiration]对象列表
