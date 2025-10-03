@@ -104,12 +104,13 @@ class OptimalExpirationSelectorTool:
                 return_process=True
             )
             
-            # 生成对比分析
+            # 生成对比分析（传递symbol）
             comparison = self._generate_comparison(
-                formatted_expirations, 
+                formatted_expirations,
                 optimal,
                 optimizer,
-                volatility
+                volatility,
+                symbol  # ✅ 传递symbol启用股票特定优化
             )
             
             # 构建返回结果
@@ -266,28 +267,37 @@ class OptimalExpirationSelectorTool:
 
         return None
     
-    def _generate_comparison(self, 
+    def _generate_comparison(self,
                             all_expirations: List[Dict],
                             optimal: ExpirationCandidate,
                             optimizer: ExpirationOptimizer,
-                            volatility: float) -> Dict[str, Any]:
+                            volatility: float,
+                            symbol: str = "") -> Dict[str, Any]:
         """
-        生成到期日对比分析
+        生成到期日对比分析（支持股票特定优化）
+
+        Args:
+            all_expirations: 所有到期日列表
+            optimal: 最优候选
+            optimizer: 优化器实例
+            volatility: 波动率
+            symbol: 股票代码（用于股票特定优化）
         """
-        # 评估所有候选
+        # 评估所有候选（传递symbol启用股票特定优化）
         all_candidates = []
         for exp in all_expirations:
             candidate = optimizer.evaluate_expiration(
                 days=exp['days'],
                 expiration_type=exp.get('type', 'other'),
                 date=exp.get('date'),  # 传递原始日期字符串
-                volatility=volatility
+                volatility=volatility,
+                symbol=symbol  # ✅ 传递symbol
             )
             all_candidates.append(candidate)
-        
+
         # 排序
         all_candidates.sort(key=lambda x: x.composite_score, reverse=True)
-        
+
         # 返回前3名
         top_3 = []
         for i, candidate in enumerate(all_candidates[:3]):
@@ -298,7 +308,7 @@ class OptimalExpirationSelectorTool:
                 'score': round(candidate.composite_score, 2),
                 'reason': candidate.selection_reason
             })
-        
+
         return {
             'top_3': top_3,
             'all_candidates': all_candidates

@@ -52,6 +52,44 @@ class ExpirationOptimizer:
         'liquidity': 0.25,
         'event_buffer': 0.15
     }
+
+    # 股票市场档案 - Phase 1静态映射表（技术债：Phase 4后迁移到实时API）
+    # 高波动科技股
+    HIGH_VOLATILITY_TECH = {
+        'TSLA': {'volatility_ratio': 1.30, 'beta': 1.40, 'liquidity': 1.20, 'market_cap_tier': 1.0, 'options_activity': 0.8},
+        'NVDA': {'volatility_ratio': 1.25, 'beta': 1.35, 'liquidity': 1.30, 'market_cap_tier': 1.5, 'options_activity': 0.9},
+        'AMD': {'volatility_ratio': 1.28, 'beta': 1.45, 'liquidity': 1.10, 'market_cap_tier': 1.0, 'options_activity': 0.7},
+        'PLTR': {'volatility_ratio': 1.35, 'beta': 1.50, 'liquidity': 0.90, 'market_cap_tier': 0.7, 'options_activity': 0.6},
+    }
+
+    # 大盘蓝筹股
+    LARGE_CAP_BLUE_CHIP = {
+        'AAPL': {'volatility_ratio': 0.95, 'beta': 1.05, 'liquidity': 1.50, 'market_cap_tier': 1.5, 'options_activity': 0.9},
+        'MSFT': {'volatility_ratio': 0.90, 'beta': 0.95, 'liquidity': 1.40, 'market_cap_tier': 1.5, 'options_activity': 0.8},
+        'GOOG': {'volatility_ratio': 1.00, 'beta': 1.10, 'liquidity': 1.35, 'market_cap_tier': 1.5, 'options_activity': 0.7},
+        'AMZN': {'volatility_ratio': 1.05, 'beta': 1.15, 'liquidity': 1.30, 'market_cap_tier': 1.5, 'options_activity': 0.8},
+    }
+
+    # 高Beta波动股
+    HIGH_BETA_STOCKS = {
+        'GME': {'volatility_ratio': 1.50, 'beta': 1.80, 'liquidity': 1.00, 'market_cap_tier': 0.7, 'options_activity': 0.9},
+        'AMC': {'volatility_ratio': 1.45, 'beta': 1.75, 'liquidity': 0.95, 'market_cap_tier': 0.7, 'options_activity': 0.8},
+    }
+
+    # 稳健大盘股
+    STABLE_LARGE_CAP = {
+        'SPY': {'volatility_ratio': 0.85, 'beta': 1.00, 'liquidity': 1.60, 'market_cap_tier': 1.5, 'options_activity': 1.0},
+        'QQQ': {'volatility_ratio': 0.95, 'beta': 1.10, 'liquidity': 1.55, 'market_cap_tier': 1.5, 'options_activity': 0.95},
+        'DIA': {'volatility_ratio': 0.80, 'beta': 0.95, 'liquidity': 1.30, 'market_cap_tier': 1.5, 'options_activity': 0.7},
+    }
+
+    # 默认调整因子（用于未知股票或不提供symbol时）
+    DEFAULT_ADJUSTMENTS = {
+        'gamma_adjustment': 1.0,
+        'theta_adjustment': 1.0,
+        'liquidity_adjustment': 1.0,
+        'income_adjustment': 1.0,
+    }
     
     def __init__(self, weights: Optional[Dict[str, float]] = None):
         """
@@ -70,78 +108,181 @@ class ExpirationOptimizer:
             # 自动归一化
             for key in self.weights:
                 self.weights[key] /= total
+
+    def _get_stock_market_profile(self, symbol: str) -> Dict[str, float]:
+        """
+        获取股票市场档案（客观市场特征）
+
+        Phase 1实现：使用静态映射表
+        Phase 4计划：迁移到实时API数据
+
+        Args:
+            symbol: 股票代码
+
+        Returns:
+            包含以下字段的字典:
+            - volatility_ratio: IV/HV比值 (范围: 0.5-2.0)
+            - liquidity: 流动性因子 (范围: 0.5-2.0)
+            - market_cap_tier: 市值分级 (大盘1.5, 中盘1.0, 小盘0.7)
+            - beta: Beta系数 (范围: 0.5-2.0)
+            - options_activity: 期权活跃度 (范围: 0-1.0)
+        """
+        # 优先级查找：高波动科技股 -> 大盘蓝筹股 -> 高Beta股 -> 稳健大盘股
+        if symbol in self.HIGH_VOLATILITY_TECH:
+            return self.HIGH_VOLATILITY_TECH[symbol]
+        elif symbol in self.LARGE_CAP_BLUE_CHIP:
+            return self.LARGE_CAP_BLUE_CHIP[symbol]
+        elif symbol in self.HIGH_BETA_STOCKS:
+            return self.HIGH_BETA_STOCKS[symbol]
+        elif symbol in self.STABLE_LARGE_CAP:
+            return self.STABLE_LARGE_CAP[symbol]
+        else:
+            # 未知股票：返回中性档案
+            logger.info(f"{symbol} 不在已知档案中，使用中性默认值")
+            return {
+                'volatility_ratio': 1.0,
+                'beta': 1.0,
+                'liquidity': 1.0,
+                'market_cap_tier': 1.0,
+                'options_activity': 0.5
+            }
+
+    def _calculate_dynamic_adjustments(self, market_profile: Dict[str, float]) -> Dict[str, float]:
+        """
+        基于股票市场档案计算动态调整因子（完全客观数学公式）
+
+        Args:
+            market_profile: 股票市场特征字典
+
+        Returns:
+            调整因子字典，包含:
+            - gamma_adjustment: Gamma风险调整 (0.7-1.3)
+            - theta_adjustment: Theta效率调整 (0.8-1.2)
+            - liquidity_adjustment: 流动性调整 (0.8-1.3)
+            - income_adjustment: 收入优化调整 (0.8-1.2)
+        """
+        vol_ratio = market_profile.get('volatility_ratio', 1.0)
+        beta = market_profile.get('beta', 1.0)
+        liquidity = market_profile.get('liquidity', 1.0)
+        market_cap_tier = market_profile.get('market_cap_tier', 1.0)
+        options_activity = market_profile.get('options_activity', 0.5)
+
+        # 1. Gamma风险调整（高波动高Beta -> 更保守）
+        # 公式: 0.8 + (vol_ratio - 1.0) * (-0.15) + (beta - 1.0) * (-0.10)
+        # TSLA示例: 0.8 + (1.3-1.0)*(-0.15) + (1.4-1.0)*(-0.10) = 0.8 - 0.045 - 0.040 = 0.715
+        gamma_adjustment = 0.8 + (vol_ratio - 1.0) * (-0.15) + (beta - 1.0) * (-0.10)
+        gamma_adjustment = max(0.7, min(1.3, gamma_adjustment))  # 限制范围
+
+        # 2. Theta效率调整（大盘股 -> 更灵活）
+        # 公式: 0.9 + (market_cap_tier - 1.0) * 0.15 + (liquidity - 1.0) * 0.10
+        # AAPL示例: 0.9 + (1.5-1.0)*0.15 + (1.5-1.0)*0.10 = 0.9 + 0.075 + 0.050 = 1.025
+        theta_adjustment = 0.9 + (market_cap_tier - 1.0) * 0.15 + (liquidity - 1.0) * 0.10
+        theta_adjustment = max(0.8, min(1.2, theta_adjustment))
+
+        # 3. 流动性调整（高流动性 -> 更高评分）
+        # 公式: 0.8 + liquidity * 0.15 + options_activity * 0.15
+        liquidity_adjustment = 0.8 + liquidity * 0.15 + options_activity * 0.15
+        liquidity_adjustment = max(0.8, min(1.3, liquidity_adjustment))
+
+        # 4. 收入优化调整（高IV -> 更激进收入策略）
+        # 公式: 0.9 + (vol_ratio - 1.0) * 0.20
+        # 高IV意味着期权权利金更高，可以更激进
+        income_adjustment = 0.9 + (vol_ratio - 1.0) * 0.20
+        income_adjustment = max(0.8, min(1.2, income_adjustment))
+
+        return {
+            'gamma_adjustment': gamma_adjustment,
+            'theta_adjustment': theta_adjustment,
+            'liquidity_adjustment': liquidity_adjustment,
+            'income_adjustment': income_adjustment,
+        }
     
-    def calculate_theta_efficiency(self, days: int) -> float:
+    def calculate_theta_efficiency(self, days: int, adjustment_factor: float = 1.0) -> float:
         """
         计算Theta衰减效率评分
-        
+
         基于期权理论：Theta在30-45天达到最优平衡
         - 太短（<21天）：Theta绝对值大但Gamma风险高
         - 太长（>60天）：Theta效率低，资金占用时间长
-        
+
+        Args:
+            days: 到期天数
+            adjustment_factor: 调整因子（用于股票特定优化）
+
         Returns:
             0-100的效率评分
         """
+        # 基础评分曲线（通用数学模型）
         if days < 7:
-            return 10.0  # 过短，风险太高
+            base_score = 10.0  # 过短，风险太高
         elif days < 21:
             # 线性下降：从60分降到30分
-            return 30 + (days - 7) * 30 / 14
+            base_score = 30 + (days - 7) * 30 / 14
         elif days <= 30:
             # 快速上升：从60分升到95分
-            return 60 + (days - 21) * 35 / 9
+            base_score = 60 + (days - 21) * 35 / 9
         elif days <= 45:
             # 最优区间：95-100分
-            return 95 + (45 - days) * 5 / 15
+            base_score = 95 + (45 - days) * 5 / 15
         elif days <= 60:
             # 缓慢下降：从95分降到70分
-            return 95 - (days - 45) * 25 / 15
+            base_score = 95 - (days - 45) * 25 / 15
         else:
             # 继续下降
-            return max(40, 70 - (days - 60) * 0.5)
+            base_score = max(40, 70 - (days - 60) * 0.5)
+
+        # 应用股票特定调整因子
+        return base_score * adjustment_factor
     
-    def calculate_gamma_risk(self, days: int, volatility: float = 0.3) -> float:
+    def calculate_gamma_risk(self, days: int, volatility: float = 0.3, adjustment_factor: float = 1.0) -> float:
         """
         计算Gamma风险评分（越高越好）
-        
+
         Gamma风险在接近到期时急剧上升
-        
+
         Args:
             days: 到期天数
             volatility: 隐含波动率（用于调整风险曲线）
-        
+            adjustment_factor: 调整因子（用于股票特定优化）
+
         Returns:
             0-100的风险控制评分（高分表示风险可控）
         """
-        # 基于Black-Scholes的Gamma特性
+        # 基础评分曲线（基于Black-Scholes的Gamma特性）
         if days < 7:
-            return 20.0  # 极高Gamma风险
+            base_score = 20.0  # 极高Gamma风险
         elif days < 14:
-            return 20 + (days - 7) * 20 / 7
+            base_score = 20 + (days - 7) * 20 / 7
         elif days < 21:
-            return 40 + (days - 14) * 20 / 7
+            base_score = 40 + (days - 14) * 20 / 7
         elif days < 30:
-            return 60 + (days - 21) * 20 / 9
+            base_score = 60 + (days - 21) * 20 / 9
         else:
             # 30天以上Gamma风险较低且稳定
             base_score = 80
             # 根据波动率调整
             vol_adjustment = (0.3 - volatility) * 20  # 高波动率降低评分
-            return min(100, base_score + vol_adjustment + (days - 30) * 0.2)
+            base_score = base_score + vol_adjustment + (days - 30) * 0.2
+
+        # 应用股票特定调整因子，并限制在合理范围内
+        adjusted_score = base_score * adjustment_factor
+        return min(100, adjusted_score)
     
-    def calculate_liquidity_score(self, expiration_type: str, 
+    def calculate_liquidity_score(self, expiration_type: str,
                                  days: int,
                                  volume: Optional[int] = None,
-                                 open_interest: Optional[int] = None) -> float:
+                                 open_interest: Optional[int] = None,
+                                 adjustment_factor: float = 1.0) -> float:
         """
         计算流动性评分
-        
+
         Args:
             expiration_type: 'weekly', 'monthly', 'quarterly'
             days: 到期天数
             volume: 交易量（可选）
             open_interest: 未平仓量（可选）
-        
+            adjustment_factor: 调整因子（用于股票特定优化）
+
         Returns:
             0-100的流动性评分
         """
@@ -155,9 +296,9 @@ class ExpirationOptimizer:
             'eoq': 75,      # 季末到期
             'other': 60     # 其他
         }
-        
+
         base_score = base_scores.get(expiration_type.lower(), 60)
-        
+
         # 根据到期天数调整
         if days < 7:
             # 太近的期权流动性可能变差
@@ -165,7 +306,7 @@ class ExpirationOptimizer:
         elif days > 90:
             # 太远的期权流动性较差
             base_score *= 0.8
-        
+
         # 如果提供了实际交易数据，进一步调整
         if volume is not None and open_interest is not None:
             if open_interest > 0:
@@ -174,8 +315,10 @@ class ExpirationOptimizer:
                     base_score = min(100, base_score * 1.1)
                 elif turnover < 0.1:
                     base_score *= 0.8
-        
-        return min(100, base_score)
+
+        # 应用股票特定调整因子
+        adjusted_score = base_score * adjustment_factor
+        return min(100, adjusted_score)
     
     def calculate_event_buffer_score(self, days: int, 
                                     next_earnings_days: Optional[int] = None) -> float:
@@ -214,9 +357,10 @@ class ExpirationOptimizer:
                            expiration_type: str,
                            date: Optional[str] = None,
                            volatility: float = 0.3,
-                           next_earnings_days: Optional[int] = None) -> ExpirationCandidate:
+                           next_earnings_days: Optional[int] = None,
+                           symbol: Optional[str] = None) -> ExpirationCandidate:
         """
-        评估单个到期日
+        评估单个到期日（支持股票特定优化）
 
         Args:
             days: 到期天数
@@ -224,14 +368,35 @@ class ExpirationOptimizer:
             date: 到期日期 (YYYY-MM-DD格式, 可选)
             volatility: 隐含波动率
             next_earnings_days: 距离财报天数
+            symbol: 股票代码（可选，用于股票特定优化）
 
         Returns:
             ExpirationCandidate对象
         """
-        # 计算各项指标
-        theta_score = self.calculate_theta_efficiency(days)
-        gamma_score = self.calculate_gamma_risk(days, volatility)
-        liquidity_score = self.calculate_liquidity_score(expiration_type, days)
+        # 获取股票特定调整因子
+        if symbol:
+            market_profile = self._get_stock_market_profile(symbol)
+            adjustments = self._calculate_dynamic_adjustments(market_profile)
+        else:
+            # 向后兼容：不提供symbol时使用默认调整因子（全部为1.0）
+            adjustments = self.DEFAULT_ADJUSTMENTS
+            market_profile = None
+
+        # 计算各项指标（应用股票特定调整）
+        theta_score = self.calculate_theta_efficiency(
+            days,
+            adjustment_factor=adjustments['theta_adjustment']
+        )
+        gamma_score = self.calculate_gamma_risk(
+            days,
+            volatility,
+            adjustment_factor=adjustments['gamma_adjustment']
+        )
+        liquidity_score = self.calculate_liquidity_score(
+            expiration_type,
+            days,
+            adjustment_factor=adjustments['liquidity_adjustment']
+        )
         event_score = self.calculate_event_buffer_score(days, next_earnings_days)
 
         # 计算综合评分
@@ -242,8 +407,25 @@ class ExpirationOptimizer:
             self.weights['event_buffer'] * event_score
         )
 
-        # 生成选择理由
+        # 生成选择理由（包含股票特定信息）
         reasons = []
+        
+        # 添加股票特定调整说明
+        if symbol and market_profile:
+            vol_ratio = market_profile.get('volatility_ratio', 1.0)
+            beta = market_profile.get('beta', 1.0)
+            
+            if vol_ratio > 1.15:
+                reasons.append(f"{symbol}高波动(IV/HV={vol_ratio:.2f})")
+            elif vol_ratio < 0.90:
+                reasons.append(f"{symbol}低波动(IV/HV={vol_ratio:.2f})")
+            
+            if beta > 1.25:
+                reasons.append(f"高Beta({beta:.2f})")
+            elif beta < 0.85:
+                reasons.append(f"低Beta({beta:.2f})")
+
+        # 添加评分说明
         if theta_score > 90:
             reasons.append(f"Theta效率极佳({theta_score:.0f}/100)")
         if gamma_score > 80:
@@ -280,11 +462,11 @@ class ExpirationOptimizer:
                                strategy_type: str = "csp",
                                return_process: bool = False) -> Tuple[ExpirationCandidate, Optional[Dict[str, Any]]]:
         """
-        从可用到期日中找出最优选择
+        从可用到期日中找出最优选择（支持股票特定优化）
 
         Args:
             available_expirations: 可用到期日列表
-            symbol: 股票代码（用于日志）
+            symbol: 股票代码（用于股票特定优化和日志）
             volatility: 当前隐含波动率
             strategy_type: 策略类型（csp, covered_call等）
             return_process: 是否返回完整优化过程
@@ -295,13 +477,21 @@ class ExpirationOptimizer:
         """
         candidates = []
 
+        # 获取股票市场档案（用于优化过程跟踪）
+        market_profile = None
+        adjustments = None
+        if symbol:
+            market_profile = self._get_stock_market_profile(symbol)
+            adjustments = self._calculate_dynamic_adjustments(market_profile)
+
         for exp in available_expirations:
             candidate = self.evaluate_expiration(
                 days=exp['days'],
                 expiration_type=exp.get('type', 'other'),
                 date=exp.get('date'),  # 传递原始日期字符串
                 volatility=volatility,
-                next_earnings_days=exp.get('next_earnings_days')
+                next_earnings_days=exp.get('next_earnings_days'),
+                symbol=symbol  # ✅ 传递symbol启用股票特定优化
             )
             candidates.append(candidate)
 
@@ -316,7 +506,9 @@ class ExpirationOptimizer:
 
         # 如果需要返回优化过程
         if return_process:
-            process_details = self._generate_optimization_process(candidates, best, symbol)
+            process_details = self._generate_optimization_process(
+                candidates, best, symbol, market_profile, adjustments
+            )
             return best, process_details
 
         return best, None
@@ -324,14 +516,18 @@ class ExpirationOptimizer:
     def _generate_optimization_process(self,
                                       all_candidates: List[ExpirationCandidate],
                                       selected: ExpirationCandidate,
-                                      symbol: str = "") -> Dict[str, Any]:
+                                      symbol: str = "",
+                                      market_profile: Optional[Dict[str, float]] = None,
+                                      adjustments: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """
-        生成优化过程详情
+        生成优化过程详情（增强：包含股票特定优化信息）
 
         Args:
             all_candidates: 所有候选（已排序）
             selected: 最终选择
             symbol: 股票代码
+            market_profile: 股票市场档案（可选）
+            adjustments: 动态调整因子（可选）
 
         Returns:
             优化过程详情字典
@@ -448,6 +644,39 @@ class ExpirationOptimizer:
                 "综合评分": f"加权计算: Theta{self.weights['theta_efficiency']:.0%} + Gamma{self.weights['gamma_risk']:.0%} + 流动性{self.weights['liquidity']:.0%} + 事件缓冲{self.weights['event_buffer']:.0%}"
             }
         }
+
+        # 7. 添加股票特定优化信息（如果可用）
+        if market_profile and adjustments:
+            process["market_profile"] = {
+                "波动率比值": round(market_profile.get('volatility_ratio', 1.0), 2),
+                "Beta系数": round(market_profile.get('beta', 1.0), 2),
+                "流动性因子": round(market_profile.get('liquidity', 1.0), 2),
+                "市值分级": round(market_profile.get('market_cap_tier', 1.0), 2),
+                "期权活跃度": round(market_profile.get('options_activity', 0.5), 2)
+            }
+            process["dynamic_adjustments"] = {
+                "Gamma调整": round(adjustments.get('gamma_adjustment', 1.0), 3),
+                "Theta调整": round(adjustments.get('theta_adjustment', 1.0), 3),
+                "流动性调整": round(adjustments.get('liquidity_adjustment', 1.0), 3),
+                "收入调整": round(adjustments.get('income_adjustment', 1.0), 3)
+            }
+            
+            # 添加调整推理
+            adjustment_reasoning = []
+            vol_ratio = market_profile.get('volatility_ratio', 1.0)
+            beta = market_profile.get('beta', 1.0)
+            
+            if vol_ratio > 1.15:
+                adjustment_reasoning.append(f"高波动率(IV/HV={vol_ratio:.2f}) → Gamma风险评分降低{(1-adjustments['gamma_adjustment'])*100:.1f}%")
+            if beta > 1.25:
+                adjustment_reasoning.append(f"高Beta({beta:.2f}) → Gamma风险更保守")
+            if market_profile.get('market_cap_tier', 1.0) >= 1.5:
+                adjustment_reasoning.append("大盘股 → Theta效率评分提升")
+            if market_profile.get('liquidity', 1.0) >= 1.3:
+                adjustment_reasoning.append("高流动性 → 流动性评分加成")
+                
+            if adjustment_reasoning:
+                process["adjustment_reasoning"] = adjustment_reasoning
 
         return process
     
