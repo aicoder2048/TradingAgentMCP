@@ -209,21 +209,22 @@ class ExpirationOptimizer:
             # 太接近财报
             return 30
     
-    @lru_cache(maxsize=128)
-    def evaluate_expiration(self, 
+    def evaluate_expiration(self,
                            days: int,
                            expiration_type: str,
+                           date: Optional[str] = None,
                            volatility: float = 0.3,
                            next_earnings_days: Optional[int] = None) -> ExpirationCandidate:
         """
         评估单个到期日
-        
+
         Args:
             days: 到期天数
             expiration_type: 到期类型
+            date: 到期日期 (YYYY-MM-DD格式, 可选)
             volatility: 隐含波动率
             next_earnings_days: 距离财报天数
-        
+
         Returns:
             ExpirationCandidate对象
         """
@@ -232,7 +233,7 @@ class ExpirationOptimizer:
         gamma_score = self.calculate_gamma_risk(days, volatility)
         liquidity_score = self.calculate_liquidity_score(expiration_type, days)
         event_score = self.calculate_event_buffer_score(days, next_earnings_days)
-        
+
         # 计算综合评分
         composite_score = (
             self.weights['theta_efficiency'] * theta_score +
@@ -240,7 +241,7 @@ class ExpirationOptimizer:
             self.weights['liquidity'] * liquidity_score +
             self.weights['event_buffer'] * event_score
         )
-        
+
         # 生成选择理由
         reasons = []
         if theta_score > 90:
@@ -251,13 +252,16 @@ class ExpirationOptimizer:
             reasons.append(f"流动性优秀({liquidity_score:.0f}/100)")
         if event_score > 90:
             reasons.append("完美避开财报事件")
-        
+
         if not reasons:
             reasons.append(f"综合评分{composite_score:.1f}/100")
-        
-        # 计算到期日期
-        expiration_date = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-        
+
+        # 使用提供的日期，如果没有则根据天数计算
+        if date:
+            expiration_date = date
+        else:
+            expiration_date = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
+
         return ExpirationCandidate(
             date=expiration_date,
             days_to_expiry=days,
@@ -287,11 +291,12 @@ class ExpirationOptimizer:
             最优到期日
         """
         candidates = []
-        
+
         for exp in available_expirations:
             candidate = self.evaluate_expiration(
                 days=exp['days'],
                 expiration_type=exp.get('type', 'other'),
+                date=exp.get('date'),  # 传递原始日期字符串
                 volatility=volatility,
                 next_earnings_days=exp.get('next_earnings_days')
             )

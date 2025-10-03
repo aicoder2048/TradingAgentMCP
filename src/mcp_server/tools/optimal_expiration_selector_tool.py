@@ -230,22 +230,23 @@ class OptimalExpirationSelectorTool:
     async def _fetch_available_expirations(self, symbol: str) -> Optional[List[str]]:
         """
         从Tradier获取可用到期日
-        
+
         注意：这需要实际的Tradier客户端实现
         """
         if not self.tradier_client:
             # 如果没有客户端，返回None让调用方处理
             logger.warning(f"无Tradier客户端，无法获取{symbol}的到期日数据")
             return None
-        
+
         try:
-            # 实际调用Tradier API
-            response = await self.tradier_client.get_option_expirations(symbol)
-            if response and 'expirations' in response:
-                return response['expirations']['date']
+            # 实际调用Tradier API（注意：get_option_expirations是同步方法）
+            response = self.tradier_client.get_option_expirations(symbol)
+            if response:
+                # response是List[OptionExpiration]对象列表
+                return [exp.date for exp in response]
         except Exception as e:
             logger.error(f"获取到期日失败: {e}")
-        
+
         return None
     
     def _generate_comparison(self, 
@@ -262,6 +263,7 @@ class OptimalExpirationSelectorTool:
             candidate = optimizer.evaluate_expiration(
                 days=exp['days'],
                 expiration_type=exp.get('type', 'other'),
+                date=exp.get('date'),  # 传递原始日期字符串
                 volatility=volatility
             )
             all_candidates.append(candidate)

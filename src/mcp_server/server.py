@@ -23,6 +23,7 @@ from .tools.optimal_expiration_selector_tool import OptimalExpirationSelectorToo
 from .prompts.hello_prompt import call_hello_multiple
 from .prompts.income_generation_csp_prompt import income_generation_csp_engine
 from .config.settings import settings
+from src.provider.tradier.client import TradierClient
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):
@@ -438,7 +439,9 @@ def create_server() -> FastMCP:
         Returns:
             最优到期日及详细评分、选择理由、各维度评分细节
         """
-        tool = OptimalExpirationSelectorTool()
+        # Initialize Tradier client for fetching expiration data
+        tradier_client = TradierClient()
+        tool = OptimalExpirationSelectorTool(tradier_client=tradier_client)
         return await tool.execute(
             symbol=symbol,
             available_expirations=available_expirations,
