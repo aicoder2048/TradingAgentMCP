@@ -53,7 +53,11 @@ class ExpirationOptimizer:
         'event_buffer': 0.15
     }
 
-    # 股票市场档案 - Phase 1静态映射表（技术债：Phase 4后迁移到实时API）
+    # ===== 静态映射表 - 仅作为API降级方案保留 =====
+    # ⚠️ 技术债务：这些静态映射表仅在API调用失败时作为降级方案使用
+    # Phase 4已实现API优先策略，优先从实时数据获取档案
+    # 保留原因：确保在API不可用时系统仍能正常运行
+
     # 高波动科技股
     HIGH_VOLATILITY_TECH = {
         'TSLA': {'volatility_ratio': 1.30, 'beta': 1.40, 'liquidity': 1.20, 'market_cap_tier': 1.0, 'options_activity': 0.8},
@@ -91,14 +95,16 @@ class ExpirationOptimizer:
         'income_adjustment': 1.0,
     }
     
-    def __init__(self, weights: Optional[Dict[str, float]] = None):
+    def __init__(self, weights: Optional[Dict[str, float]] = None, tradier_client=None):
         """
         初始化优化器
         
         Args:
             weights: 自定义权重配置
+            tradier_client: Tradier客户端实例（Phase 4 API模式需要）
         """
         self.weights = weights or self.DEFAULT_WEIGHTS
+        self.tradier_client = tradier_client
         self._validate_weights()
     
     def _validate_weights(self):
@@ -113,8 +119,10 @@ class ExpirationOptimizer:
         """
         获取股票市场档案（客观市场特征）
 
-        Phase 1实现：使用静态映射表
-        Phase 4计划：迁移到实时API数据
+        Phase 4实现：API优先策略
+        - 如果提供了tradier_client，尝试从实时API获取
+        - 失败时降级到静态映射表
+        - 最终降级到中性档案
 
         Args:
             symbol: 股票代码
@@ -127,25 +135,43 @@ class ExpirationOptimizer:
             - beta: Beta系数 (范围: 0.5-2.0)
             - options_activity: 期权活跃度 (范围: 0-1.0)
         """
+        # ===== Phase 4: API优先策略 =====
+        if self.tradier_client:
+            try:
+                logger.info(f"尝试从API获取{symbol}的市场档案...")
+                api_profile = self._calculate_profile_from_api(
+                    symbol,
+                    tradier_client=self.tradier_client
+                )
+                # 检查是否成功获取（不是中性档案）
+                if api_profile.get('volatility_ratio', 1.0) != 1.0 or \
+                   api_profile.get('beta', 1.0) != 1.0 or \
+                   api_profile.get('liquidity', 1.0) != 1.0:
+                    logger.info(f"成功从API获取{symbol}市场档案: {api_profile}")
+                    return api_profile
+                else:
+                    logger.info(f"API返回中性档案，降级到静态映射表")
+            except Exception as e:
+                logger.warning(f"从API获取{symbol}档案失败，降级到静态映射表: {e}")
+        
+        # ===== Phase 1: 静态映射表降级策略 =====
         # 优先级查找：高波动科技股 -> 大盘蓝筹股 -> 高Beta股 -> 稳健大盘股
         if symbol in self.HIGH_VOLATILITY_TECH:
+            logger.info(f"{symbol} 使用高波动科技股档案")
             return self.HIGH_VOLATILITY_TECH[symbol]
         elif symbol in self.LARGE_CAP_BLUE_CHIP:
+            logger.info(f"{symbol} 使用大盘蓝筹股档案")
             return self.LARGE_CAP_BLUE_CHIP[symbol]
         elif symbol in self.HIGH_BETA_STOCKS:
+            logger.info(f"{symbol} 使用高Beta股票档案")
             return self.HIGH_BETA_STOCKS[symbol]
         elif symbol in self.STABLE_LARGE_CAP:
+            logger.info(f"{symbol} 使用稳健大盘股档案")
             return self.STABLE_LARGE_CAP[symbol]
         else:
             # 未知股票：返回中性档案
             logger.info(f"{symbol} 不在已知档案中，使用中性默认值")
-            return {
-                'volatility_ratio': 1.0,
-                'beta': 1.0,
-                'liquidity': 1.0,
-                'market_cap_tier': 1.0,
-                'options_activity': 0.5
-            }
+            return self._get_neutral_profile()
 
     def _calculate_dynamic_adjustments(self, market_profile: Dict[str, float]) -> Dict[str, float]:
         """
@@ -195,6 +221,254 @@ class ExpirationOptimizer:
             'theta_adjustment': theta_adjustment,
             'liquidity_adjustment': liquidity_adjustment,
             'income_adjustment': income_adjustment,
+        }
+
+    # ==================== Phase 4: 实时API数据获取方法 ====================
+
+    def _extract_atm_implied_volatility(self,
+                                       option_chain: List,
+                                       underlying_price: float,
+                                       expiration: str = None) -> Optional[float]:
+        """
+        从Tradier期权链提取ATM期权的隐含波动率
+        
+        Args:
+            option_chain: Tradier期权链数据（TradierQuote列表）
+            underlying_price: 标的资产当前价格
+            expiration: 指定到期日（可选，用于筛选）
+            
+        Returns:
+            ATM期权的mid_iv，如果无法获取则返回None
+        """
+        if not option_chain:
+            return None
+        
+        # 筛选指定到期日（如果提供）
+        if expiration:
+            option_chain = [opt for opt in option_chain if opt.expiration_date == expiration]
+        
+        # 找到最接近ATM的期权
+        atm_option = None
+        min_strike_diff = float('inf')
+        
+        for option in option_chain:
+            if not option.strike:
+                continue
+            
+            strike_diff = abs(option.strike - underlying_price)
+            if strike_diff < min_strike_diff:
+                min_strike_diff = strike_diff
+                atm_option = option
+        
+        # 提取IV数据
+        if atm_option and atm_option.greeks:
+            # 优先使用mid_iv（最准确）
+            if isinstance(atm_option.greeks, dict):
+                return atm_option.greeks.get('mid_iv') or \
+                       atm_option.greeks.get('smv_vol') or \
+                       atm_option.greeks.get('bid_iv')
+            else:
+                # 如果greeks是对象
+                return getattr(atm_option.greeks, 'mid_iv', None) or \
+                       getattr(atm_option.greeks, 'smv_vol', None) or \
+                       getattr(atm_option.greeks, 'bid_iv', None)
+        
+        return None
+
+    def _calculate_historical_volatility(self, symbol: str, period: int = 30) -> Optional[float]:
+        """
+        计算历史波动率（HV）
+        
+        Args:
+            symbol: 股票代码
+            period: 计算周期（天数），默认30天
+            
+        Returns:
+            年化历史波动率，如果无法计算则返回None
+        """
+        try:
+            from src.stock.history_data import get_stock_history_data
+            from datetime import datetime, timedelta
+            
+            # 计算日期范围
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=period + 10)  # 多取10天以确保足够数据
+            
+            # 获取历史数据
+            result = get_stock_history_data(
+                symbol=symbol,
+                start_date=start_date.strftime('%Y-%m-%d'),
+                end_date=end_date.strftime('%Y-%m-%d'),
+                interval='daily',
+                include_indicators=True
+            )
+            
+            if not result or 'data' not in result:
+                return None
+            
+            df = result['data']
+            
+            # 从技术指标中提取volatility
+            if 'volatility' in df.columns:
+                # 取最近的有效volatility值
+                recent_volatility = df['volatility'].dropna().tail(5).mean()
+                return recent_volatility if not np.isnan(recent_volatility) else None
+            
+            # 备选：手动计算
+            if 'close' in df.columns and len(df) >= period:
+                returns = df['close'].pct_change().dropna()
+                if len(returns) > 0:
+                    volatility = returns.std() * np.sqrt(252)  # 年化
+                    return volatility
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"计算历史波动率失败 ({symbol}): {e}")
+            return None
+
+    def _calculate_profile_from_api(self,
+                                    symbol: str,
+                                    tradier_client=None,
+                                    stock_info_processor=None) -> Dict[str, float]:
+        """
+        从实时API计算股票市场档案（Phase 4核心方法）
+        
+        Args:
+            symbol: 股票代码
+            tradier_client: Tradier客户端实例（可选）
+            stock_info_processor: StockInfo处理器实例（可选）
+            
+        Returns:
+            股票市场档案字典
+        """
+        try:
+            # 如果没有提供client，尝试导入并创建
+            if not tradier_client:
+                try:
+                    from src.provider.tradier.client import TradierClient
+                    tradier_client = TradierClient()
+                except Exception as e:
+                    logger.warning(f"无法创建TradierClient: {e}")
+                    return self._get_neutral_profile()
+            
+            if not stock_info_processor:
+                try:
+                    from src.stock.info import StockInfoProcessor
+                    stock_info_processor = StockInfoProcessor(tradier_client)
+                except Exception as e:
+                    logger.warning(f"无法创建StockInfoProcessor: {e}")
+                    return self._get_neutral_profile()
+            
+            # 1. 获取股票基础信息
+            try:
+                # StockInfoProcessor.get_stock_info是async的，但在非async上下文中无法直接调用
+                # 这里需要同步调用，所以使用tradier_client直接获取quote
+                quotes = tradier_client.get_quotes([symbol.upper()])
+                if not quotes:
+                    logger.warning(f"无法获取{symbol}的报价数据")
+                    return self._get_neutral_profile()
+                
+                quote = quotes[0]
+                current_price = quote.last or quote.close
+                
+                # 获取Beta（如果可用）
+                # Note: Tradier的quote对象可能不包含beta，需要从其他来源获取
+                beta = 1.0  # 默认值
+                
+                # 获取市值tier（从quote推断）
+                # 简化版：基于成交量推断
+                volume = quote.volume or 0
+                market_cap_tier = 1.0  # 默认中盘
+                if volume > 50000000:  # 大盘股（高成交量）
+                    market_cap_tier = 1.5
+                elif volume < 5000000:  # 小盘股（低成交量）
+                    market_cap_tier = 0.7
+                
+            except Exception as e:
+                logger.warning(f"获取{symbol}股票信息失败: {e}")
+                return self._get_neutral_profile()
+            
+            # 2. 获取期权链（含Greeks和IV）
+            try:
+                # 获取最近的到期日
+                expirations = tradier_client.get_option_expirations(symbol)
+                if not expirations or len(expirations) == 0:
+                    logger.warning(f"{symbol}无可用期权到期日")
+                    return self._get_neutral_profile()
+                
+                # 选择30-45天的到期日（最优Theta范围）
+                target_expiration = None
+                for exp in expirations:
+                    if 25 <= exp.days <= 50:
+                        target_expiration = exp.date
+                        break
+                
+                if not target_expiration:
+                    # 降级：使用第一个可用到期日
+                    target_expiration = expirations[0].date
+                
+                # 获取期权链（包含Greeks）
+                option_chain = tradier_client.get_option_chain(
+                    symbol=symbol,
+                    expiration=target_expiration,
+                    include_greeks=True
+                )
+                
+                # 提取ATM隐含波动率
+                iv = self._extract_atm_implied_volatility(option_chain, current_price, target_expiration)
+                
+            except Exception as e:
+                logger.warning(f"获取{symbol}期权链失败: {e}")
+                iv = None
+            
+            # 3. 计算历史波动率
+            hv = self._calculate_historical_volatility(symbol, period=30)
+            
+            # 4. 计算各项指标
+            
+            # volatility_ratio: IV/HV
+            if iv and hv and hv > 0:
+                volatility_ratio = iv / hv
+                # 限制在合理范围
+                volatility_ratio = max(0.5, min(2.0, volatility_ratio))
+            else:
+                volatility_ratio = 1.0
+            
+            # liquidity_factor: 基于成交量
+            avg_volume = quote.average_volume or quote.volume or 1
+            current_volume = quote.volume or avg_volume
+            liquidity_base = current_volume / avg_volume if avg_volume > 0 else 1.0
+            liquidity_factor = liquidity_base * (market_cap_tier / 1.0)  # 调整市值因子
+            liquidity_factor = max(0.5, min(2.0, liquidity_factor))
+            
+            # options_activity: 期权活跃度（简化版）
+            # 这里使用IV的可用性作为活跃度指标
+            options_activity = 0.8 if iv else 0.5
+            
+            profile = {
+                'volatility_ratio': round(volatility_ratio, 2),
+                'beta': round(beta, 2),
+                'liquidity': round(liquidity_factor, 2),
+                'market_cap_tier': round(market_cap_tier, 1),
+                'options_activity': round(options_activity, 1),
+            }
+            
+            logger.info(f"从API计算{symbol}市场档案: {profile}")
+            return profile
+            
+        except Exception as e:
+            logger.error(f"从API计算市场档案失败 ({symbol}): {e}", exc_info=True)
+            return self._get_neutral_profile()
+
+    def _get_neutral_profile(self) -> Dict[str, float]:
+        """返回中性市场档案（所有值为1.0）"""
+        return {
+            'volatility_ratio': 1.0,
+            'beta': 1.0,
+            'liquidity': 1.0,
+            'market_cap_tier': 1.0,
+            'options_activity': 0.5,
         }
     
     def calculate_theta_efficiency(self, days: int, adjustment_factor: float = 1.0) -> float:

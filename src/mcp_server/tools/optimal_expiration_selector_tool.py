@@ -49,7 +49,8 @@ class OptimalExpirationSelectorTool:
     def __init__(self, tradier_client=None):
         """初始化工具"""
         self.tradier_client = tradier_client
-        self.optimizer = ExpirationOptimizer()
+        # Phase 4: 传递tradier_client给optimizer启用API模式
+        self.optimizer = ExpirationOptimizer(tradier_client=tradier_client)
     
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """
@@ -88,12 +89,13 @@ class OptimalExpirationSelectorTool:
             formatted_expirations = self._format_expirations(available_expirations)
             
             # 创建优化器（可能使用自定义权重）
+            # Phase 4: 传递tradier_client启用API模式
             if weights:
-                optimizer = ExpirationOptimizer(weights)
+                optimizer = ExpirationOptimizer(weights, tradier_client=self.tradier_client)
             else:
                 # 根据策略类型使用不同的默认权重
                 strategy_weights = self._get_strategy_weights(strategy_type)
-                optimizer = ExpirationOptimizer(strategy_weights)
+                optimizer = ExpirationOptimizer(strategy_weights, tradier_client=self.tradier_client)
             
             # 执行优化（启用详细过程）
             optimal, optimization_process = optimizer.find_optimal_expiration(
