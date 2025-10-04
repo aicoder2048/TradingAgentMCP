@@ -17,6 +17,7 @@
 - **⚖️ 三级风险建议**: 保守、平衡、激进三种风险级别的投资建议 🆕
 - **💵 收入生成CSP引擎**: 专业收入导向现金担保看跌策略提示生成器，目标≥50%年化收益 🆕
 - **🏗️ 股票建仓CSP引擎**: 专业股票获取导向现金担保看跌策略提示生成器，欢迎分配建仓 🆕
+- **🔄 期权仓位再平衡引擎**: 实时风险监控、智能决策分析和防御性Roll策略执行 🆕
 - **🔧 环境配置**: 基于环境变量的灵活配置，支持沙盒和生产环境
 - **🧩 模块化架构**: 工具、提示和配置的清晰分离
 - **🧪 测试就绪**: 内置 pytest 测试框架
@@ -357,7 +358,7 @@ uv run pytest tests/tools/test_hello_tool.py
 
 - **stock_acquisition_csp_engine**: 股票建仓现金担保看跌策略引擎 🆕
   - 生成以折扣价建立股票头寸的期权策略执行计划，欢迎股票分配
-  - 参数: 
+  - 参数:
     - `tickers` (股票列表): 目标股票代码 (例如: ["AAPL", "MSFT"])
     - `cash_usd` (浮点数): 可用资金
     - `target_allocation_probability` (浮点数): 目标分配概率 (默认: 65.0%)
@@ -367,6 +368,29 @@ uv run pytest tests/tools/test_hello_tool.py
     - `target_annual_return_pct` (浮点数): 目标年化收益率 (默认: 25.0%)
     - `preferred_sectors` (字符串): 偏好行业 (默认: "Technology,Healthcare,Consumer Discretionary")
   - 返回: 综合的股票建仓策略执行提示，包含基本面分析、期权筛选、组合配置和分配后管理
+
+- **option_position_rebalancer_engine**: 期权仓位再平衡与风险管理引擎 🆕
+  - 为现有期权仓位提供实时风险监控、智能决策分析和防御性策略执行
+  - 参数:
+    - `option_symbol` (必需): OCC标准期权合约符号 (例如: "MU251017P00167500", "TSLA250919P00390000")
+    - `position_size` (必需): 仓位大小 (负数表示做空，正数表示做多)
+    - `entry_price` (必需): 入场价格 (期权单价 per share)
+    - `position_type` (可选): 仓位类型 - "short_put", "short_call", "long_put", "long_call" (默认: "short_put")
+    - `entry_date` (可选): 入场日期 YYYY-MM-DD 格式
+    - `risk_tolerance` (可选): 风险容忍度 - "conservative", "moderate", "aggressive" (默认: "moderate")
+    - `defensive_roll_trigger_pct` (可选): 防御性滚动触发阈值百分比 (默认: 15.0)
+    - `profit_target_pct` (可选): 获利目标百分比 (默认: 70.0)
+    - `max_additional_capital` (可选): 最大额外资金投入 (默认: 0)
+  - 返回:
+    - 实时P&L和Greeks风险敞口分析
+    - Hold/Close/Roll的量化评分和决策支持
+    - 防御性策略 (Calendar/Diagonal/Triple Strike Resize Roll)
+    - Bloomberg/IEX标准订单格式
+  - 特色:
+    - 自动解析OCC期权符号 (股票代码、到期日、行权价、期权类型)
+    - 实时被行权概率计算和风险监控
+    - 基于市场条件的智能策略评估
+    - 三级风险容忍度的差异化建议
 
 ## 🎯 与 Claude Code 配合使用
 
@@ -417,6 +441,11 @@ uv run pytest tests/tools/test_hello_tool.py
 使用 stock_acquisition_csp_engine 提示生成 AAPL 保守建仓策略 (tickers=["AAPL"], cash_usd=50000, target_allocation_probability=60.0, max_single_position_pct=20.0)
 使用 stock_acquisition_csp_engine 提示生成多股票平衡建仓策略 (tickers=["AAPL","MSFT","GOOGL"], cash_usd=100000, target_allocation_probability=65.0, target_annual_return_pct=25.0)
 使用 stock_acquisition_csp_engine 提示生成激进建仓策略 (tickers=["TSLA","NVDA"], cash_usd=200000, target_allocation_probability=75.0, max_single_position_pct=35.0)
+
+# 期权仓位再平衡引擎提示 🆕
+使用 option_position_rebalancer_engine 分析现有MU看跌期权仓位 (option_symbol="MU251017P00167500", position_size=-4, entry_price=2.03)
+使用 option_position_rebalancer_engine 评估TSLA看涨期权持仓 (option_symbol="TSLA251017C00250000", position_size=-20, entry_price=12.00, risk_tolerance="conservative")
+使用 option_position_rebalancer_engine 管理GOOG看跌期权策略 (option_symbol="GOOG251017P00150000", position_size=-10, entry_price=15.50, max_additional_capital=50000)
 ```
 
 ## 🚦 Development Workflow
