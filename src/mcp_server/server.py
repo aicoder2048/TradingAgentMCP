@@ -22,6 +22,7 @@ from .tools.simplified_stock_allocation_tool import simplified_stock_allocation_
 from .tools.optimal_expiration_selector_tool import OptimalExpirationSelectorTool
 from .prompts.hello_prompt import call_hello_multiple
 from .prompts.income_generation_csp_prompt import income_generation_csp_engine
+from .prompts.option_position_rebalancer_prompt import option_position_rebalancer_engine
 from .config.settings import settings
 from src.provider.tradier.client import TradierClient
 
@@ -635,6 +636,62 @@ def create_server() -> FastMCP:
             max_single_position_pct=max_single_position_pct,
             target_annual_return_pct=target_annual_return_pct,
             preferred_sectors=preferred_sectors
+        )
+
+    @mcp.prompt()
+    async def option_position_rebalancer_engine_prompt(
+        option_symbol: str,
+        position_size: int,
+        entry_price: Union[float, int, str],
+        position_type: str = "short_put",
+        entry_date: Optional[str] = None,
+        risk_tolerance: str = "moderate",
+        defensive_roll_trigger_pct: Union[float, int] = 15.0,
+        profit_target_pct: Union[float, int] = 70.0,
+        max_additional_capital: Union[float, int] = 0.0,
+    ) -> str:
+        """
+        Generate option position rebalancing and risk management execution prompt.
+
+        Creates a comprehensive analysis and decision support system for existing option positions.
+        Provides real-time monitoring, intelligent Hold/Close/Roll decisions, and defensive strategy
+        execution plans including Calendar Roll, Diagonal Roll, and Triple Strike Resize.
+
+        Args:
+            option_symbol: Option contract symbol (e.g., "TSLA250919P00390000")
+            position_size: Position size (negative for short, e.g., -100 means sold 100 contracts)
+            entry_price: Entry price (option price per share, e.g., 13.00)
+            position_type: Position type ("short_put", "short_call", "long_put", "long_call")
+            entry_date: Entry date (optional, format: "YYYY-MM-DD")
+            risk_tolerance: Risk tolerance ("conservative", "moderate", "aggressive")
+            defensive_roll_trigger_pct: Defensive roll trigger threshold (default: 15%, triggers when loss reaches 15%)
+            profit_target_pct: Profit target percentage (default: 70%, consider closing when premium decays 70%)
+            max_additional_capital: Maximum additional capital for roll strategies (default: 0)
+
+        Returns:
+            Comprehensive rebalancing execution prompt string with tool call sequences,
+            decision scoring logic, and professional execution plans
+        """
+        # 参数类型转换（支持多种类型输入）
+        try:
+            position_size = int(position_size)
+            entry_price = float(entry_price)
+            defensive_roll_trigger_pct = float(defensive_roll_trigger_pct)
+            profit_target_pct = float(profit_target_pct)
+            max_additional_capital = float(max_additional_capital)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"参数类型转换失败: {e}")
+
+        return await option_position_rebalancer_engine(
+            option_symbol=option_symbol,
+            position_size=position_size,
+            entry_price=entry_price,
+            position_type=position_type,
+            entry_date=entry_date,
+            risk_tolerance=risk_tolerance,
+            defensive_roll_trigger_pct=defensive_roll_trigger_pct,
+            profit_target_pct=profit_target_pct,
+            max_additional_capital=max_additional_capital
         )
 
     return mcp
