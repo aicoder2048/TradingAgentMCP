@@ -182,7 +182,8 @@ async def test_examples_and_guidelines():
     for key, example in examples.items():
         print(f"  - {key}: {example['description']}")
 
-    assert len(examples) == 3
+    assert len(examples) == 4
+    assert "mu_compact_mode" in examples
     assert "short_put_losing" in examples
     assert "short_put_winning" in examples
     assert "short_call_defensive" in examples
@@ -252,6 +253,68 @@ async def test_option_symbol_parsing():
     print("\n✅ 测试通过: 期权符号解析功能正常")
 
 
+async def test_end_to_end_mu_option_parsing():
+    """测试端到端MU期权符号解析 - 这是bug报告中的实际用例"""
+    print("\n" + "="*80)
+    print("测试场景 7: 端到端MU期权符号解析 (Bug修复验证)")
+    print("="*80)
+
+    # 这是用户报告的实际输入
+    option_symbol = "MU251017P00167500"
+    position_size = 4
+    entry_price = 2.03
+
+    print(f"\n用户输入:")
+    print(f"  期权符号: {option_symbol}")
+    print(f"  仓位大小: {position_size}")
+    print(f"  入场价格: ${entry_price}")
+
+    result = await option_position_rebalancer_engine(
+        option_symbol=option_symbol,
+        position_size=position_size,
+        entry_price=entry_price,
+        position_type="short_put",
+        entry_date="2025-09-15",
+        risk_tolerance="moderate"
+    )
+
+    print("\n生成的提示词长度:", len(result), "字符")
+
+    # 验证解析结果在输出中
+    print("\n验证解析结果:")
+
+    # 检查标的股票
+    assert "MU" in result, "标的股票MU应该在输出中"
+    assert "标的股票: MU" in result or "标的股票**: MU" in result, "标的股票应该正确解析"
+    print("  ✓ 标的股票: MU")
+
+    # 检查行权价
+    assert "167.5" in result or "167.50" in result, "行权价167.50应该在输出中"
+    assert "$167.5" in result, "行权价应该格式化为货币"
+    print("  ✓ 行权价格: $167.50")
+
+    # 检查到期日
+    assert "2025-10-17" in result, "到期日2025-10-17应该在输出中"
+    print("  ✓ 到期日期: 2025-10-17")
+
+    # 检查期权类型
+    assert "看跌" in result or "PUT" in result or "put" in result.lower(), "应该识别为PUT期权"
+    print("  ✓ 期权类型: PUT (看跌期权)")
+
+    # 验证不包含错误的解析结果
+    assert "$0.00" not in result or result.count("$0.00") == 0, "不应该有0.00的行权价"
+    assert "M-U2-51" not in result, "不应该有乱码日期"
+    print("  ✓ 无乱码或错误值")
+
+    # 验证包含解析验证部分
+    assert "参数解析验证" in result or "解析验证" in result or "解析结果" in result, "应该包含解析验证部分"
+    print("  ✓ 包含解析验证部分")
+
+    print("\n✅ 测试通过: MU期权符号端到端解析成功!")
+    print("   Bug已修复: 期权符号正确解析为 MU, $167.50, 2025-10-17, PUT")
+    return result
+
+
 async def main():
     """主测试函数"""
     print("\n" + "="*80)
@@ -268,6 +331,9 @@ async def main():
         result2 = await test_short_put_winning_position()
         result3 = await test_short_call_defensive()
 
+        # 运行端到端bug修复验证测试
+        result4 = await test_end_to_end_mu_option_parsing()
+
         # 最终总结
         print("\n" + "="*80)
         print("📊 测试总结")
@@ -277,7 +343,8 @@ async def main():
         print(f"  场景1 (亏损Put): {len(result1):,} 字符")
         print(f"  场景2 (盈利Put): {len(result2):,} 字符")
         print(f"  场景3 (防御Call): {len(result3):,} 字符")
-        print(f"  平均长度: {(len(result1) + len(result2) + len(result3)) // 3:,} 字符")
+        print(f"  场景4 (MU Bug修复): {len(result4):,} 字符")
+        print(f"  平均长度: {(len(result1) + len(result2) + len(result3) + len(result4)) // 4:,} 字符")
 
         print("\n" + "="*80)
         print("🎉 期权仓位再平衡引擎测试完成!")

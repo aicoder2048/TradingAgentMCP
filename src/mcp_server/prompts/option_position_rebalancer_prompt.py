@@ -14,6 +14,7 @@ Option Position Rebalancer Engine MCP Server Prompt
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
+import logging
 
 
 class PositionType(str, Enum):
@@ -45,25 +46,113 @@ async def option_position_rebalancer_engine(
     """
     生成期权仓位再平衡策略执行提示
 
+    支持两种输入模式:
+    1. **简洁模式** (推荐): 提供OCC标准期权符号,系统自动解析
+    2. **结构化模式**: 显式提供所有参数 (向后兼容)
+
     Args:
-        option_symbol: 期权合约符号 (例如: "TSLA250919P00390000")
-        position_size: 仓位大小 (负数表示做空，例如: -100表示卖出100个合约)
-        entry_price: 入场价格 (期权单价per share，例如: 13.00)
-        position_type: 仓位类型 ("short_put", "short_call", "long_put", "long_call")
-        entry_date: 入场日期 (可选，格式: "YYYY-MM-DD")
-        risk_tolerance: 风险容忍度 ("conservative", "moderate", "aggressive")
-        defensive_roll_trigger_pct: 防御性滚动触发阈值 (默认: 15%, 当亏损达到15%时触发)
-        profit_target_pct: 获利目标百分比 (默认: 70%, 当权利金衰减70%时考虑平仓)
-        max_additional_capital: 最大额外资金投入 (默认: 0, 用于评估是否接受需要额外资金的滚动策略)
+        option_symbol: OCC标准期权合约符号
+            格式: [TICKER][YYMMDD][C/P][STRIKE_PRICE]
+            例如:
+            - "TSLA250919P00390000" -> TSLA, 2025-09-19, PUT, $390.00
+            - "MU251017P00167500" -> MU, 2025-10-17, PUT, $167.50
+            - "AAPL251017C00220000" -> AAPL, 2025-10-17, CALL, $220.00
+
+        position_size: 仓位大小
+            - 负数表示做空 (例如: -4 表示卖出4个合约)
+            - 正数表示做多 (例如: 4 表示买入4个合约)
+
+        entry_price: 入场价格 (期权单价per share)
+            例如: 2.03 表示每股$2.03, 每个合约$203
+
+        position_type: 仓位类型
+            - "short_put": 做空看跌期权 (Cash-Secured Put)
+            - "short_call": 做空看涨期权 (Covered Call)
+            - "long_put": 做多看跌期权
+            - "long_call": 做多看涨期权
+
+        entry_date: 入场日期 (可选)
+            格式: "YYYY-MM-DD"
+            例如: "2025-09-15"
+
+        risk_tolerance: 风险容忍度
+            - "conservative": 保守型 (优先风险控制)
+            - "moderate": 平衡型 (平衡风险与收益)
+            - "aggressive": 激进型 (优先收益最大化)
+
+        defensive_roll_trigger_pct: 防御性滚动触发阈值
+            默认: 15%
+            当亏损达到此百分比时,系统会评估滚动策略
+
+        profit_target_pct: 获利目标百分比
+            默认: 70%
+            当权利金衰减达到此百分比时,考虑平仓锁定利润
+
+        max_additional_capital: 最大额外资金投入
+            默认: 0
+            用于评估是否接受需要额外资金的滚动策略
 
     Returns:
         str: 综合的再平衡执行提示计划字符串
+            包含:
+            - 解析验证结果
+            - 仓位概览
+            - 风险评估
+            - 工具调用序列
+            - 决策评分逻辑
+            - 执行计划
 
     Raises:
-        ValueError: 当输入参数无效时
+        ValueError: 当输入参数无效或期权符号解析失败时
+
+    Example:
+        >>> # 简洁模式 (推荐)
+        >>> prompt = await option_position_rebalancer_engine(
+        ...     option_symbol="MU251017P00167500",
+        ...     position_size=4,
+        ...     entry_price=2.03,
+        ...     position_type="short_put"
+        ... )
+
+        >>> # 结构化模式
+        >>> prompt = await option_position_rebalancer_engine(
+        ...     option_symbol="MU251017P00167500",
+        ...     position_size=4,
+        ...     entry_price=2.03,
+        ...     position_type="short_put",
+        ...     entry_date="2025-09-15",
+        ...     risk_tolerance="moderate",
+        ...     defensive_roll_trigger_pct=15.0,
+        ...     profit_target_pct=70.0,
+        ...     max_additional_capital=50000
+        ... )
     """
 
-    # 参数验证
+    # 首先从期权符号中提取信息 (Fail Fast原则)
+    try:
+        underlying_symbol = _extract_underlying_from_option_symbol(option_symbol)
+        strike_price = _extract_strike_from_option_symbol(option_symbol)
+        expiration_date = _extract_expiration_from_option_symbol(option_symbol)
+
+        # 提取期权类型 (P=put, C=call)
+        # 在日期后、行权价前应该有一个字符表示类型
+        option_type_char = None
+        for char in option_symbol:
+            if char in ['P', 'C']:
+                option_type_char = char
+                break
+
+        if option_type_char == 'P':
+            option_type = "put"
+        elif option_type_char == 'C':
+            option_type = "call"
+        else:
+            raise ValueError(f"无法从期权符号 '{option_symbol}' 中识别期权类型 (需要包含P或C)")
+
+    except ValueError as e:
+        raise ValueError(f"期权符号解析失败: {str(e)}")
+
+    # 参数验证 (包含解析结果验证)
     validation_result = _validate_rebalancer_parameters(
         option_symbol=option_symbol,
         position_size=position_size,
@@ -73,17 +162,23 @@ async def option_position_rebalancer_engine(
         risk_tolerance=risk_tolerance,
         defensive_roll_trigger_pct=defensive_roll_trigger_pct,
         profit_target_pct=profit_target_pct,
-        max_additional_capital=max_additional_capital
+        max_additional_capital=max_additional_capital,
+        # 传递解析结果进行验证
+        parsed_underlying=underlying_symbol,
+        parsed_strike=strike_price,
+        parsed_expiration=expiration_date,
+        parsed_option_type=option_type
     )
 
     if not validation_result["is_valid"]:
         raise ValueError(f"参数验证失败: {', '.join(validation_result['errors'])}")
 
-    # 从期权符号中提取信息
-    underlying_symbol = _extract_underlying_from_option_symbol(option_symbol)
-    strike_price = _extract_strike_from_option_symbol(option_symbol)
-    expiration_date = _extract_expiration_from_option_symbol(option_symbol)
-    option_type = "put" if "P" in option_symbol else "call"
+    # 显示警告 (如果有)
+    if validation_result.get("warnings"):
+        import logging
+        logger = logging.getLogger(__name__)
+        for warning in validation_result["warnings"]:
+            logger.warning(warning)
 
     # 计算仓位成本
     position_cost = abs(position_size) * entry_price * 100  # 每个合约100股
@@ -118,13 +213,35 @@ def _validate_rebalancer_parameters(
     risk_tolerance: str,
     defensive_roll_trigger_pct: float,
     profit_target_pct: float,
-    max_additional_capital: float
+    max_additional_capital: float,
+    parsed_underlying: str = "",
+    parsed_strike: float = 0.0,
+    parsed_expiration: str = "",
+    parsed_option_type: str = ""
 ) -> Dict[str, Any]:
     """
     验证再平衡引擎输入参数的有效性
 
+    Args:
+        option_symbol: 原始期权符号
+        position_size: 仓位大小
+        entry_price: 入场价格
+        position_type: 仓位类型
+        entry_date: 入场日期
+        risk_tolerance: 风险容忍度
+        defensive_roll_trigger_pct: 防御性滚动触发百分比
+        profit_target_pct: 获利目标百分比
+        max_additional_capital: 最大额外资金
+        parsed_underlying: 解析出的标的股票代码
+        parsed_strike: 解析出的行权价
+        parsed_expiration: 解析出的到期日
+        parsed_option_type: 解析出的期权类型
+
     Returns:
         Dict[str, Any]: 包含验证结果的字典
+            - is_valid: bool
+            - errors: List[str]
+            - warnings: List[str]
     """
     errors = []
     warnings = []
@@ -134,6 +251,19 @@ def _validate_rebalancer_parameters(
         errors.append("期权符号必须是非空字符串")
     elif len(option_symbol) < 10:
         errors.append("期权符号格式不正确，长度过短")
+    elif len(option_symbol) > 30:
+        errors.append("期权符号格式不正确，长度过长")
+
+    # 验证解析结果
+    if parsed_underlying:
+        if len(parsed_underlying) > 6:
+            warnings.append(f"标的股票代码 '{parsed_underlying}' 长度异常，请验证")
+
+    if parsed_strike > 0:
+        if parsed_strike > 10000:
+            warnings.append(f"行权价 ${parsed_strike:.2f} 异常高，请验证")
+        elif parsed_strike < 0.1:
+            warnings.append(f"行权价 ${parsed_strike:.2f} 异常低，请验证")
 
     # 验证仓位大小
     if not isinstance(position_size, int) or position_size == 0:
@@ -186,8 +316,26 @@ def _validate_rebalancer_parameters(
 
 
 def _extract_underlying_from_option_symbol(option_symbol: str) -> str:
-    """从期权符号提取标的股票代码"""
-    # 期权符号格式: TSLA250919P00390000
+    """
+    从OCC标准期权符号提取标的股票代码
+
+    OCC格式: [TICKER][YYMMDD][C/P][STRIKE_PRICE]
+    例如: TSLA250919P00390000 -> TSLA
+         GOOG251017C00150500 -> GOOG
+         SPXW250919P00400000 -> SPXW
+
+    Args:
+        option_symbol: OCC标准期权符号
+
+    Returns:
+        str: 标的股票代码
+
+    Raises:
+        ValueError: 当符号格式无效时
+    """
+    if not option_symbol or not isinstance(option_symbol, str):
+        raise ValueError("期权符号必须是非空字符串")
+
     # 提取前面的字母部分
     underlying = ""
     for char in option_symbol:
@@ -195,25 +343,84 @@ def _extract_underlying_from_option_symbol(option_symbol: str) -> str:
             underlying += char
         else:
             break
-    return underlying
+
+    if not underlying:
+        raise ValueError(f"无法从期权符号 '{option_symbol}' 中提取标的股票代码")
+
+    return underlying.upper()
 
 
 def _extract_strike_from_option_symbol(option_symbol: str) -> float:
-    """从期权符号提取行权价"""
-    # 期权符号格式: TSLA250919P00390000
-    # 提取最后8位数字: 前5位整数部分，后3位小数部分
+    """
+    从OCC标准期权符号提取行权价
+
+    OCC格式中行权价编码规则:
+    - 最后8位数字表示行权价
+    - 前5位是整数部分 (00000-99999)
+    - 后3位是小数部分 (000-999, 表示千分位)
+
+    例如:
+    - 00390000 -> 390.000
+    - 00167500 -> 167.500
+    - 00150500 -> 150.500
+
+    Args:
+        option_symbol: OCC标准期权符号
+
+    Returns:
+        float: 行权价
+
+    Raises:
+        ValueError: 当符号格式无效或行权价超出合理范围时
+    """
+    if not option_symbol or len(option_symbol) < 8:
+        raise ValueError(f"期权符号 '{option_symbol}' 长度不足,无法提取行权价")
+
     try:
         strike_str = option_symbol[-8:]
+        if not strike_str.isdigit():
+            raise ValueError(f"行权价部分 '{strike_str}' 包含非数字字符")
+
         strike = float(strike_str[:5]) + float(strike_str[5:]) / 1000
+
+        # 验证行权价在合理范围内 (0.001 到 99999.999)
+        if strike < 0.001 or strike > 99999.999:
+            raise ValueError(f"行权价 {strike} 超出合理范围 (0.001-99999.999)")
+
         return strike
-    except:
-        return 0.0
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"解析行权价失败: {str(e)}")
 
 
 def _extract_expiration_from_option_symbol(option_symbol: str) -> str:
-    """从期权符号提取到期日"""
-    # 期权符号格式: TSLA250919P00390000
-    # 提取日期部分: 250919 -> 2025-09-19
+    """
+    从OCC标准期权符号提取到期日
+
+    OCC格式中日期编码规则:
+    - YYMMDD格式,紧跟在ticker之后
+    - YY: 年份后两位 (25 = 2025)
+    - MM: 月份 (01-12)
+    - DD: 日期 (01-31)
+
+    例如:
+    - TSLA250919P... -> 2025-09-19
+    - MU251017P... -> 2025-10-17
+    - AAPL260115C... -> 2026-01-15
+
+    Args:
+        option_symbol: OCC标准期权符号
+
+    Returns:
+        str: ISO 8601格式的日期字符串 (YYYY-MM-DD)
+
+    Raises:
+        ValueError: 当符号格式无效或日期无效时
+    """
+    if not option_symbol or not isinstance(option_symbol, str):
+        raise ValueError("期权符号必须是非空字符串")
+
     try:
         # 找到字母结束的位置
         date_start = 0
@@ -222,15 +429,36 @@ def _extract_expiration_from_option_symbol(option_symbol: str) -> str:
                 date_start = i
                 break
 
+        if date_start == 0:
+            raise ValueError(f"期权符号 '{option_symbol}' 格式无效,找不到日期部分")
+
+        # 验证是否有足够的字符
+        if len(option_symbol) < date_start + 6:
+            raise ValueError(f"期权符号 '{option_symbol}' 长度不足,无法提取6位日期")
+
         # 提取6位日期
         date_str = option_symbol[date_start:date_start+6]
+        if not date_str.isdigit():
+            raise ValueError(f"日期部分 '{date_str}' 包含非数字字符")
+
         year = "20" + date_str[:2]
         month = date_str[2:4]
         day = date_str[4:6]
 
+        # 验证日期有效性
+        from datetime import datetime
+        try:
+            parsed_date = datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d")
+            # 注意: 不验证日期是否过期,因为这可能用于历史分析或测试
+            # 在实际使用中,过期日期会在后续的业务逻辑中处理
+        except ValueError:
+            raise ValueError(f"无效的日期: {year}-{month}-{day}")
+
         return f"{year}-{month}-{day}"
-    except:
-        return "未知"
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"解析到期日失败: {str(e)}")
 
 
 def _generate_rebalancer_prompt(
@@ -279,7 +507,23 @@ def _generate_rebalancer_prompt(
         risk_weight_text = "平衡风险与收益（标准决策权重）"
         assignment_threshold = 0.80
 
+    # 转换option_type为中文
+    option_type_cn = "看跌期权 (PUT)" if option_type == "put" else "看涨期权 (CALL)"
+
     prompt = f"""# 🎯 期权仓位再平衡与风险管理引擎
+
+## 🔍 参数解析验证
+
+**原始输入**: {option_symbol}
+**解析结果**:
+- ✓ 标的股票: {underlying_symbol}
+- ✓ 行权价格: ${strike_price:.2f}
+- ✓ 到期日期: {expiration_date}
+- ✓ 期权类型: {option_type_cn}
+
+*请确认以上解析结果正确。如有误,请检查期权符号格式或使用结构化输入模式。*
+
+---
 
 ## 📊 当前仓位概览
 
@@ -290,6 +534,7 @@ def _generate_rebalancer_prompt(
 **合约数量**: {position_size}个合约 ({abs(position_size) * 100}股标的)
 **行权价格**: ${strike_price:.2f}
 **到期日期**: {expiration_date}
+**期权类型**: {option_type_cn}
 **入场价格**: ${entry_price:.2f}/股
 **入场日期**: {entry_date if entry_date else '未提供'}
 **仓位成本**: ${position_cost:,.0f}
@@ -653,11 +898,22 @@ def get_rebalancer_examples() -> Dict[str, Any]:
     获取期权仓位再平衡使用示例
 
     Returns:
-        Dict[str, Any]: 包含使用示例的字典
+        Dict[str, Any]: 包含使用示例的字典,展示简洁模式和结构化模式
     """
     return {
+        "mu_compact_mode": {
+            "description": "MU期权 - 简洁模式 (Bug修复示例)",
+            "example_call": {
+                "option_symbol": "MU251017P00167500",
+                "position_size": 4,
+                "entry_price": 2.03,
+                "position_type": "short_put"
+            },
+            "expected_outcome": "正确解析为: MU, $167.50, 2025-10-17, PUT",
+            "use_case": "简洁模式 - 最小参数快速调用"
+        },
         "short_put_losing": {
-            "description": "亏损的做空Put仓位",
+            "description": "亏损的做空Put仓位 - 结构化模式",
             "example_call": {
                 "option_symbol": "TSLA250919P00390000",
                 "position_size": -100,
