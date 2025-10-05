@@ -186,8 +186,8 @@ async def option_limit_order_probability_tool(
 
         effective_vol = vol_result["effective_volatility"]
 
-        # Step 5: 运行蒙特卡洛模拟
-        print(f"🎲 运行蒙特卡洛模拟 (10,000 paths)...")
+        # Step 5: 运行蒙特卡洛模拟（改进版 - 包含日内波动）
+        print(f"🎲 运行蒙特卡洛模拟 (10,000 paths) - 考虑日内波动...")
 
         sim_params = SimulationParameters(
             current_price=current_price,
@@ -205,12 +205,18 @@ async def option_limit_order_probability_tool(
             first_day_fraction=market_ctx["first_day_fraction"]
         )
 
-        monte_carlo = MonteCarloEngine(sim_params)
-        price_paths = await monte_carlo.simulate_price_paths()
+        # 使用改进的蒙特卡洛引擎（传入tradier_client以启用日内波动估计）
+        monte_carlo = MonteCarloEngine(sim_params, tradier_client=tradier_client)
 
-        # Step 6: 检测成交
+        # 模拟价格路径（包含日内高低点）
+        price_paths = await monte_carlo.simulate_price_paths_with_intraday(
+            symbol=symbol,
+            lookback_days=90
+        )
+
+        # Step 6: 检测成交（使用改进方法考虑日内触及）
         detector = FillDetector()
-        fill_results = detector.detect_fills(
+        fill_results = detector.detect_fills_with_intraday(
             price_paths=price_paths,
             limit_price=limit_price,
             order_side=order_side,
@@ -291,7 +297,12 @@ async def option_limit_order_probability_tool(
                 "order_side": order_side,
                 "underlying_price": underlying_price
             },
+            # 日内波动改进方法的成交概率
             "fill_probability": fill_results["fill_probability"],
+            "fill_probability_close_only": fill_results.get("fill_probability_close_only"),
+            "probability_improvement": fill_results.get("probability_improvement"),
+            "improvement_percentage": fill_results.get("improvement_percentage"),
+            "uses_intraday_detection": fill_results.get("uses_intraday_detection", False),
             "first_day_fill_probability": fill_results["first_day_fill_probability"],
             "expected_days_to_fill": fill_results.get("expected_days_to_fill"),
             "median_days_to_fill": fill_results.get("median_days_to_fill"),

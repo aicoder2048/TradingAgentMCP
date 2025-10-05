@@ -47,11 +47,16 @@ class MonteCarloEngine:
     """
     高性能蒙特卡洛模拟引擎，用于期权价格路径模拟。
     使用向量化NumPy操作以提高效率。
+
+    支持两种模式：
+    1. 仅收盘价模拟（传统方法）
+    2. 包含日内高低点模拟（改进方法，考虑日内触及概率）
     """
 
-    def __init__(self, params: SimulationParameters):
+    def __init__(self, params: SimulationParameters, tradier_client=None):
         self.params = params
         self.executor = ThreadPoolExecutor(max_workers=4)
+        self.tradier_client = tradier_client
 
     async def simulate_price_paths(self) -> np.ndarray:
         """
@@ -150,6 +155,135 @@ class MonteCarloEngine:
             )
 
         return option_paths
+
+    def _simulate_paths_with_stock_vectorized(self, num_paths: int) -> Dict[str, np.ndarray]:
+        """
+        模拟价格路径，同时返回股票和期权价格
+
+        Returns:
+            {
+                'option_close': 期权收盘价路径,
+                'stock_close': 股票收盘价路径
+            }
+        """
+        days = self.params.days_to_expiry
+        stock_paths = np.zeros((num_paths, days))
+        option_paths = np.zeros((num_paths, days))
+
+        base_stock_price = self.params.underlying_price
+        base_option_price = self.params.current_price
+
+        for t in range(days):
+            if t == 0:
+                dt = self.params.first_day_fraction / 365
+                prev_stock = base_stock_price
+                prev_option = base_option_price
+            else:
+                dt = 1 / 365
+                prev_stock = stock_paths[:, t-1]
+                prev_option = option_paths[:, t-1]
+
+            if dt <= 0:
+                stock_paths[:, t] = prev_stock
+                option_paths[:, t] = prev_option
+                continue
+
+            sqrt_dt = np.sqrt(dt)
+            Z = np.random.standard_normal(num_paths)
+
+            # 股票价格演化
+            drift = -0.5 * self.params.effective_volatility ** 2 * dt
+            diffusion = self.params.effective_volatility * sqrt_dt * Z
+            stock_paths[:, t] = prev_stock * np.exp(drift + diffusion)
+
+            # 期权价格变化
+            delta_S = stock_paths[:, t] - prev_stock
+            delta_option = (
+                self.params.delta * delta_S +
+                0.5 * self.params.gamma * delta_S ** 2 +
+                self.params.theta * dt
+            )
+
+            option_paths[:, t] = np.maximum(0, prev_option + delta_option)
+
+        return {
+            'option_close': option_paths,
+            'stock_close': stock_paths
+        }
+
+    async def simulate_price_paths_with_intraday(
+        self,
+        symbol: str,
+        lookback_days: int = 90
+    ) -> Dict[str, np.ndarray]:
+        """
+        模拟包含日内高低点的价格路径
+
+        这是改进方法，考虑日内触及概率而非仅收盘价。
+
+        Args:
+            symbol: 股票代码
+            lookback_days: 用于估计日内波动的历史数据天数
+
+        Returns:
+            {
+                'close': 期权收盘价路径 (num_paths, num_days),
+                'high': 期权日内最高价路径 (num_paths, num_days),
+                'low': 期权日内最低价路径 (num_paths, num_days)
+            }
+        """
+        if not self.tradier_client:
+            # 如果没有tradier_client，回退到仅收盘价模拟
+            close_paths = await self.simulate_price_paths()
+            return {
+                'close': close_paths,
+                'high': close_paths,  # 回退：高点=收盘价
+                'low': close_paths    # 回退：低点=收盘价
+            }
+
+        # 导入日内波动率估计器
+        from .intraday_volatility import IntradayVolatilityEstimator
+
+        # 初始化估计器
+        estimator = IntradayVolatilityEstimator(self.tradier_client)
+
+        # 模拟收盘价路径（包含股票和期权）
+        # 使用并行处理
+        chunk_size = self.params.simulations // 4
+        tasks = []
+
+        for i in range(4):
+            start_idx = i * chunk_size
+            end_idx = start_idx + chunk_size if i < 3 else self.params.simulations
+            task = self._simulate_chunk_with_stock(start_idx, end_idx)
+            tasks.append(task)
+
+        chunks = await asyncio.gather(*tasks)
+
+        # 合并所有chunk
+        option_close_paths = np.vstack([c['option_close'] for c in chunks])
+        stock_close_paths = np.vstack([c['stock_close'] for c in chunks])
+
+        # 使用估计器生成日内高低点路径
+        intraday_paths = await estimator.simulate_intraday_paths(
+            close_prices=option_close_paths,
+            stock_close_prices=stock_close_paths,
+            delta=self.params.delta,
+            gamma=self.params.gamma,
+            symbol=symbol,
+            lookback_days=lookback_days
+        )
+
+        return intraday_paths
+
+    async def _simulate_chunk_with_stock(self, start_idx: int, end_idx: int) -> Dict[str, np.ndarray]:
+        """并行模拟一批价格路径（包含股票价格）"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self.executor,
+            self._simulate_paths_with_stock_vectorized,
+            end_idx - start_idx
+        )
 
     def __del__(self):
         """清理executor"""
@@ -421,6 +555,207 @@ class FillDetector:
             ],
             "touch_probability": float(touch_probability) if touch_probability is not None else None,
             "no_fill_probability": float(1 - fill_probability)
+        }
+
+    @staticmethod
+    def detect_fills_with_intraday(
+        price_paths: Dict[str, np.ndarray],
+        limit_price: float,
+        order_side: str,
+        include_touch_probability: bool = True,
+        first_day_fraction: float = 1.0,
+        current_price: Optional[float] = None,
+        expiration_date: Optional[str] = None,
+        market_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        检测成交情况 - 考虑日内高低点触及（改进方法）
+
+        这是改进的成交检测方法，考虑日内价格波动：
+        - 买单：检查日内最低价是否触及限价
+        - 卖单：检查日内最高价是否触及限价
+
+        Args:
+            price_paths: 价格路径字典 {'close': 收盘价, 'high': 最高价, 'low': 最低价}
+            limit_price: 目标限价
+            order_side: "buy" 或 "sell"
+            include_touch_probability: 追踪价格是否触及限价
+            first_day_fraction: 第一交易日的有效时间比例
+            current_price: 当前价格
+            expiration_date: 到期日期
+            market_context: 市场上下文
+
+        Returns:
+            综合成交统计数据（包含日内触及分析）
+        """
+        from datetime import datetime, timedelta
+
+        close_prices = price_paths['close']
+        high_prices = price_paths.get('high', close_prices)
+        low_prices = price_paths.get('low', close_prices)
+
+        num_paths, days = close_prices.shape
+
+        # 生成日期映射
+        day_to_calendar_date = {}
+        if expiration_date and market_context:
+            try:
+                eastern_time = market_context.get("eastern_time")
+                if eastern_time:
+                    if market_context.get("first_day_is_today"):
+                        first_calendar_date = eastern_time.date()
+                    else:
+                        first_calendar_date = eastern_time.date() + timedelta(days=1)
+
+                    for day_idx in range(days):
+                        calendar_date = first_calendar_date + timedelta(days=day_idx)
+                        day_to_calendar_date[day_idx] = calendar_date.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+
+        # 检查是否即刻成交
+        immediate_fill = False
+        if current_price is not None:
+            if order_side == "buy":
+                immediate_fill = limit_price >= current_price
+            else:
+                immediate_fill = limit_price <= current_price
+
+        # 确定成交条件（考虑日内高低点）
+        if order_side == "buy":
+            # 买单：日内最低价 <= 限价时成交
+            fills = low_prices <= limit_price
+        else:
+            # 卖单：日内最高价 >= 限价时成交
+            fills = high_prices >= limit_price
+
+        # 同时计算仅基于收盘价的成交（用于对比）
+        if order_side == "buy":
+            fills_close_only = close_prices <= limit_price
+        else:
+            fills_close_only = close_prices >= limit_price
+
+        # 找到每条路径的首次成交日
+        first_fill_days = np.full(num_paths, -1)
+        first_fill_days_close_only = np.full(num_paths, -1)
+        touched = np.zeros(num_paths, dtype=bool)
+
+        if immediate_fill:
+            first_fill_days[:] = 0
+            first_fill_days_close_only[:] = 0
+            touched[:] = True
+        else:
+            for i in range(num_paths):
+                # 日内触及检测
+                fill_indices = np.where(fills[i])[0]
+                if len(fill_indices) > 0:
+                    first_fill_days[i] = fill_indices[0]
+                    touched[i] = True
+
+                # 仅收盘价检测
+                fill_indices_close = np.where(fills_close_only[i])[0]
+                if len(fill_indices_close) > 0:
+                    first_fill_days_close_only[i] = fill_indices_close[0]
+
+        # 计算统计数据 - 日内触及
+        filled_mask = first_fill_days >= 0
+        fill_probability = np.mean(filled_mask)
+
+        # 计算统计数据 - 仅收盘价（对比）
+        filled_mask_close_only = first_fill_days_close_only >= 0
+        fill_probability_close_only = np.mean(filled_mask_close_only)
+
+        if np.any(filled_mask):
+            expected_days = np.mean(first_fill_days[filled_mask])
+            median_days = np.median(first_fill_days[filled_mask])
+
+            percentiles = {
+                25: np.percentile(first_fill_days[filled_mask], 25),
+                50: median_days,
+                75: np.percentile(first_fill_days[filled_mask], 75),
+                90: np.percentile(first_fill_days[filled_mask], 90)
+            }
+        else:
+            expected_days = float('inf')
+            median_days = float('inf')
+            percentiles = {25: float('inf'), 50: float('inf'),
+                         75: float('inf'), 90: float('inf')}
+
+        # 计算每日成交概率
+        daily_fills = []
+        cumulative_prob = 0
+
+        for day in range(days):
+            daily_fill_count = np.sum(first_fill_days == day)
+            daily_prob = daily_fill_count / num_paths
+            cumulative_prob += daily_prob
+
+            if daily_prob > 0:
+                day_entry = {
+                    "day": day + 1,
+                    "daily_prob": daily_prob,
+                    "cumulative_prob": cumulative_prob,
+                    "is_partial_day": (day == 0 and first_day_fraction < 1.0)
+                }
+
+                if day in day_to_calendar_date:
+                    day_entry["calendar_date"] = day_to_calendar_date[day]
+
+                daily_fills.append(day_entry)
+
+        # 第一天成交概率
+        first_day_fill_count = np.sum(first_fill_days == 0)
+        first_day_prob = first_day_fill_count / num_paths
+
+        # 触及概率
+        touch_probability = np.mean(touched) if include_touch_probability else None
+
+        # 百分位数描述
+        percentile_descriptions = {}
+        for pct, day_value in percentiles.items():
+            if day_value == float('inf'):
+                percentile_descriptions[pct] = "不太可能成交"
+            else:
+                day_idx = int(day_value)
+
+                if day_idx == 0:
+                    desc = "今日成交"
+                elif day_idx == 1:
+                    desc = "明日成交"
+                else:
+                    desc = f"{day_idx + 1}天内成交"
+
+                if day_idx in day_to_calendar_date:
+                    desc += f" ({day_to_calendar_date[day_idx]} EDT)"
+
+                percentile_descriptions[pct] = desc
+
+        # 计算改进幅度
+        probability_improvement = fill_probability - fill_probability_close_only
+
+        return {
+            "fill_probability": float(fill_probability),
+            "fill_probability_close_only": float(fill_probability_close_only),
+            "probability_improvement": float(probability_improvement),
+            "improvement_percentage": float(probability_improvement / fill_probability_close_only * 100) if fill_probability_close_only > 0 else None,
+            "first_day_fill_probability": float(first_day_prob),
+            "expected_days_to_fill": float(expected_days) if expected_days != float('inf') else None,
+            "median_days_to_fill": float(median_days) if median_days != float('inf') else None,
+            "percentile_days": {k: float(v) for k, v in percentiles.items()},
+            "percentile_descriptions": percentile_descriptions,
+            "probability_by_day": [
+                {
+                    "day": int(item["day"]),
+                    "daily_prob": float(item["daily_prob"]),
+                    "cumulative_prob": float(item["cumulative_prob"]),
+                    "is_partial_day": bool(item["is_partial_day"]),
+                    "calendar_date": item.get("calendar_date")
+                }
+                for item in daily_fills[:10]
+            ],
+            "touch_probability": float(touch_probability) if touch_probability is not None else None,
+            "no_fill_probability": float(1 - fill_probability),
+            "uses_intraday_detection": True  # 标记使用了日内检测
         }
 
 
@@ -815,6 +1150,12 @@ class RecommendationEngine:
         first_day_prob = fill_results.get("first_day_fill_probability", 0)
         percentile_desc = fill_results.get("percentile_descriptions", {})
 
+        # 日内波动改进信息
+        fill_prob_close_only = fill_results.get("fill_probability_close_only")
+        probability_improvement = fill_results.get("probability_improvement")
+        improvement_percentage = fill_results.get("improvement_percentage")
+        uses_intraday = fill_results.get("uses_intraday_detection", False)
+
         # 获取首日描述（带日期）
         first_day_desc = "首日"
         if fill_results.get("probability_by_day") and len(fill_results["probability_by_day"]) > 0:
@@ -824,6 +1165,13 @@ class RecommendationEngine:
 
         # 生成文本建议
         recommendations = []
+
+        # 日内波动改进说明（如果适用）
+        if uses_intraday and probability_improvement is not None and probability_improvement > 0:
+            recommendations.append(
+                f"📊 日内波动改进: 考虑日内触及后，成交概率从 {fill_prob_close_only*100:.1f}% "
+                f"提升至 {fill_prob*100:.1f}% (提升 {improvement_percentage:.1f}%)"
+            )
 
         # 主要评估
         if fill_prob >= 0.8:
