@@ -88,6 +88,11 @@ class TestOptionLimitOrderProbabilityTool:
                     assert "fill_probability" in result
                     assert 0 <= result["fill_probability"] <= 1
 
+                    # 验证first_day_fill_probability字段
+                    assert "first_day_fill_probability" in result
+                    assert 0 <= result["first_day_fill_probability"] <= 1
+                    assert result["first_day_fill_probability"] <= result["fill_probability"]
+
     @pytest.mark.asyncio
     async def test_parameter_validation(self):
         """测试输入参数验证"""
@@ -167,6 +172,7 @@ class TestOptionLimitOrderProbabilityTool:
                     assert result["status"] == "success"
                     assert result["option_details"]["order_side"] == "sell"
                     assert "fill_probability" in result
+                    assert "first_day_fill_probability" in result
 
     @pytest.mark.asyncio
     async def test_option_not_found_error(self):

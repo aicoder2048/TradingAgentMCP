@@ -346,6 +346,7 @@ uv run pytest tests/tools/test_hello_tool.py
     - `analysis_window` (可选: 分析窗口天数)
   - 返回:
     - 成交概率 (0-100%)
+    - **当日成交概率 (0-100%)** 🆕
     - 预期成交时间 (天数)
     - 置信度指标和统计验证
     - 每日成交概率分布
@@ -461,6 +462,12 @@ uv run pytest tests/tools/test_hello_tool.py
 使用 option_limit_order_probability_tool_mcp 分析 NVDA 限价单策略并获得替代建议
   (symbol="NVDA", strike_price=140.0, expiration="2025-12-19", option_type="put",
    current_price=3.20, limit_price=3.60, order_side="sell", analysis_window=14)
+
+# 专注当日成交概率 🆕
+使用 option_limit_order_probability_tool_mcp 获取 AAPL 当日成交概率（避免Greeks静态化误差）
+  (symbol="AAPL", strike_price=145.0, expiration="2025-11-07", option_type="put",
+   current_price=2.50, limit_price=2.80, order_side="sell", analysis_window=1)
+  → 查看输出中的 first_day_fill_probability 字段
 
 # 分析多个股票
 同时获取 AAPL、NVDA、MSFT 的股票数据、财报时间、历史趋势和期权策略进行综合投资分析

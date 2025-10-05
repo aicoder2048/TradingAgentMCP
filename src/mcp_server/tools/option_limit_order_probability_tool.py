@@ -23,7 +23,9 @@ from ...option.limit_order_probability import (
     SimulationParameters
 )
 from ...option.options_chain import get_options_chain_data
-from ...utils.time import get_market_time_et
+from ...option.market_time_context import calculate_first_day_context, format_market_context_summary
+from ...utils.time import get_market_time_et, get_timezone_time
+from ...market.config import MARKET_CONFIG
 
 
 async def option_limit_order_probability_tool(
@@ -164,6 +166,13 @@ async def option_limit_order_probability_tool(
                 "status": "error"
             }
 
+        # Step 3.5: 获取市场时间上下文
+        eastern_time = get_timezone_time(MARKET_CONFIG["timezone"])
+        market_ctx = calculate_first_day_context(eastern_time)
+
+        print(f"📅 市场时间上下文:")
+        print(format_market_context_summary(market_ctx))
+
         # Step 4: 计算有效波动率
         print("📊 计算有效波动率...")
         vol_mixer = VolatilityMixer(tradier_client)
@@ -191,7 +200,8 @@ async def option_limit_order_probability_tool(
             implied_volatility=implied_vol,
             historical_volatility=vol_result["historical_volatility"],
             effective_volatility=effective_vol,
-            simulations=10000
+            simulations=10000,
+            first_day_fraction=market_ctx["first_day_fraction"]
         )
 
         monte_carlo = MonteCarloEngine(sim_params)
@@ -203,7 +213,11 @@ async def option_limit_order_probability_tool(
             price_paths=price_paths,
             limit_price=limit_price,
             order_side=order_side,
-            include_touch_probability=True
+            include_touch_probability=True,
+            first_day_fraction=market_ctx["first_day_fraction"],
+            current_price=current_price,
+            expiration_date=expiration,
+            market_context=market_ctx
         )
 
         # Step 7: 计算置信度指标
@@ -277,12 +291,14 @@ async def option_limit_order_probability_tool(
                 "underlying_price": underlying_price
             },
             "fill_probability": fill_results["fill_probability"],
+            "first_day_fill_probability": fill_results["first_day_fill_probability"],
             "expected_days_to_fill": fill_results.get("expected_days_to_fill"),
             "median_days_to_fill": fill_results.get("median_days_to_fill"),
             "standard_error": confidence_metrics["standard_error"],
             "confidence_metrics": confidence_metrics,
             "probability_by_day": fill_results["probability_by_day"],
             "percentile_days": fill_results.get("percentile_days", {}),
+            "percentile_descriptions": fill_results.get("percentile_descriptions", {}),  # 新增
             "touch_probability": fill_results.get("touch_probability"),
             "analysis_basis": {
                 "implied_volatility": implied_vol,
@@ -318,7 +334,13 @@ async def option_limit_order_probability_tool(
             },
             "analysis_timestamp": et_time.strftime("%Y-%m-%d %H:%M:%S ET"),
             "market_context": {
-                "current_iv_percentile": None,  # 可以用更多市场数据添加
+                "session": market_ctx["market_session"],
+                "first_trading_day": "今天" if market_ctx["first_day_is_today"] else "明天",
+                "first_day_fraction": market_ctx["first_day_fraction"],
+                "explanation": market_ctx["explanation"],
+                "remaining_hours": market_ctx.get("remaining_hours"),
+                "total_trading_hours": market_ctx.get("total_trading_hours"),
+                "current_iv_percentile": None,
                 "recent_volatility_trend": "elevated" if vol_result.get("iv_hv_ratio", 1.0) > 1.2 else "normal"
             },
             "disclaimer": (

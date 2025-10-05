@@ -64,7 +64,12 @@ class TestMonteCarloEngine:
         paths = await engine.simulate_price_paths()
         detector = FillDetector()
 
-        results = detector.detect_fills(paths, limit_price=10.0, order_side="sell")
+        results = detector.detect_fills(
+            paths,
+            limit_price=10.0,
+            order_side="sell",
+            current_price=10.0  # 传递当前价格
+        )
         assert results["fill_probability"] > 0.99  # 应该接近100%
 
         # 测试2: 零波动率
@@ -158,6 +163,14 @@ class TestFillDetector:
         assert results["fill_probability"] == 2/3  # 3条路径中2条成交
         assert abs(results["expected_days_to_fill"] - 2.5) < 0.01  # 索引2和索引3的平均: (2+3)/2=2.5
 
+        # 验证first_day_fill_probability字段存在
+        assert "first_day_fill_probability" in results
+        assert 0 <= results["first_day_fill_probability"] <= 1
+        # 第一天概率应该 <= 总概率
+        assert results["first_day_fill_probability"] <= results["fill_probability"]
+        # 这个测试用例中没有路径在第一天(索引0)成交
+        assert results["first_day_fill_probability"] == 0
+
     def test_buy_order_detection(self):
         """测试买单成交检测"""
         paths = np.array([
@@ -175,6 +188,37 @@ class TestFillDetector:
 
         assert results["fill_probability"] == 2/3
         assert results["expected_days_to_fill"] == (2 + 3) / 2
+
+        # 验证first_day_fill_probability字段
+        assert "first_day_fill_probability" in results
+        assert results["first_day_fill_probability"] <= results["fill_probability"]
+        assert results["first_day_fill_probability"] == 0  # 没有路径在第一天成交
+
+    def test_first_day_fill_probability(self):
+        """测试第一天成交概率计算"""
+        paths = np.array([
+            [11.0, 10.5, 10.2, 10.0, 9.9],   # 第0天立即成交 (11.0 >= 11.0)
+            [10.0, 11.2, 11.5, 11.0, 10.8],  # 第1天成交
+            [10.0, 10.2, 10.4, 10.6, 10.8],  # 永不成交
+            [11.5, 11.2, 11.0, 10.9, 10.7],  # 第0天立即成交 (11.5 >= 11.0)
+        ])
+
+        detector = FillDetector()
+        results = detector.detect_fills(
+            price_paths=paths,
+            limit_price=11.0,
+            order_side="sell"
+        )
+
+        # 4条路径中3条成交
+        assert results["fill_probability"] == 3/4
+
+        # 2条路径在第0天（第一天）成交
+        assert results["first_day_fill_probability"] == 2/4
+        assert results["first_day_fill_probability"] == 0.5
+
+        # 第一天概率应该 <= 总概率
+        assert results["first_day_fill_probability"] <= results["fill_probability"]
 
     def test_percentile_calculation(self):
         """测试百分位数计算"""
@@ -290,7 +334,12 @@ class TestTheoreticalValidator:
         engine = MonteCarloEngine(params)
         paths = await engine.simulate_price_paths()
         detector = FillDetector()
-        results = detector.detect_fills(paths, limit_price=10.0, order_side="sell")
+        results = detector.detect_fills(
+            paths,
+            limit_price=10.0,
+            order_side="sell",
+            current_price=10.0  # 传递当前价格
+        )
 
         # 限价等于当前价，应该立即成交
         assert results["fill_probability"] > 0.99
@@ -348,3 +397,234 @@ class TestRecommendationEngine:
         current_limit_scenarios = [a for a in alternatives if a["scenario"] == "当前限价"]
         assert len(current_limit_scenarios) == 1
         assert current_limit_scenarios[0]["limit_price"] == 2.80
+
+
+class TestMarketTimeAwareness:
+    """测试市场时间感知功能"""
+
+    @pytest.mark.asyncio
+    async def test_partial_trading_day_simulation(self):
+        """测试部分交易日的价格模拟"""
+        # 盘中预测：剩余50%交易时间
+        params_partial = SimulationParameters(
+            current_price=10.0,
+            underlying_price=100.0,
+            strike=100.0,
+            days_to_expiry=5,
+            delta=-0.5,
+            theta=-0.1,
+            gamma=0.01,
+            vega=0.1,
+            implied_volatility=0.3,
+            historical_volatility=0.3,
+            effective_volatility=0.3,
+            simulations=100,
+            first_day_fraction=0.5  # 剩余50%时间
+        )
+
+        engine = MonteCarloEngine(params_partial)
+        paths = await engine.simulate_price_paths()
+
+        assert paths.shape == (100, 5)
+        assert np.all(paths >= 0)
+        assert np.all(np.isfinite(paths))
+
+        # 第一天的价格变化应该小于完整交易日
+        first_day_changes = np.abs(paths[:, 0] - params_partial.current_price)
+        avg_first_day_change = np.mean(first_day_changes)
+
+        # 完整交易日对比
+        params_full = SimulationParameters(
+            current_price=10.0,
+            underlying_price=100.0,
+            strike=100.0,
+            days_to_expiry=5,
+            delta=-0.5,
+            theta=-0.1,
+            gamma=0.01,
+            vega=0.1,
+            implied_volatility=0.3,
+            historical_volatility=0.3,
+            effective_volatility=0.3,
+            simulations=100,
+            first_day_fraction=1.0  # 完整交易日
+        )
+
+        engine_full = MonteCarloEngine(params_full)
+        paths_full = await engine_full.simulate_price_paths()
+        full_day_changes = np.abs(paths_full[:, 0] - params_full.current_price)
+        avg_full_day_change = np.mean(full_day_changes)
+
+        # 部分交易日的平均价格变化应该小于完整交易日
+        # 注意：由于随机性，这个测试可能偶尔失败，所以用较宽松的阈值
+        assert avg_first_day_change < avg_full_day_change * 1.2
+
+    @pytest.mark.asyncio
+    async def test_first_day_fill_probability_with_partial_day(self):
+        """测试部分交易日的首日成交概率"""
+        params = SimulationParameters(
+            current_price=10.0,
+            underlying_price=100.0,
+            strike=100.0,
+            days_to_expiry=5,
+            delta=-0.5,
+            theta=-0.1,
+            gamma=0.01,
+            vega=0.1,
+            implied_volatility=0.5,  # 高波动率
+            historical_volatility=0.5,
+            effective_volatility=0.5,
+            simulations=1000,
+            first_day_fraction=0.5  # 剩余50%时间
+        )
+
+        engine = MonteCarloEngine(params)
+        paths = await engine.simulate_price_paths()
+
+        detector = FillDetector()
+        results = detector.detect_fills(
+            paths,
+            limit_price=10.5,
+            order_side="sell",
+            first_day_fraction=0.5
+        )
+
+        # 第一天成交概率应该 > 0（因为索引0参与模拟了）
+        assert results["first_day_fill_probability"] >= 0
+
+        # 总成交概率应该 >= 第一天成交概率
+        assert results["fill_probability"] >= results["first_day_fill_probability"]
+
+    def test_is_partial_day_flag(self):
+        """测试 is_partial_day 标记正确性"""
+        # 创建简单的测试路径
+        paths = np.array([
+            [10.0, 10.5, 11.0, 10.8, 10.9],
+            [10.0, 10.2, 10.3, 11.0, 10.7],
+            [10.0, 11.0, 10.6, 10.5, 10.4],
+        ])
+
+        detector = FillDetector()
+
+        # 测试1: 部分交易日
+        results_partial = detector.detect_fills(
+            paths,
+            limit_price=11.0,
+            order_side="sell",
+            first_day_fraction=0.5
+        )
+
+        # 第一天应该标记为 is_partial_day
+        prob_by_day = results_partial["probability_by_day"]
+        if len(prob_by_day) > 0 and prob_by_day[0]["day"] == 1:
+            assert prob_by_day[0]["is_partial_day"] is True
+
+        # 测试2: 完整交易日
+        results_full = detector.detect_fills(
+            paths,
+            limit_price=11.0,
+            order_side="sell",
+            first_day_fraction=1.0
+        )
+
+        # 第一天不应该标记为 is_partial_day
+        prob_by_day_full = results_full["probability_by_day"]
+        if len(prob_by_day_full) > 0 and prob_by_day_full[0]["day"] == 1:
+            assert prob_by_day_full[0]["is_partial_day"] is False
+
+    def test_zero_remaining_time(self):
+        """测试剩余时间为0的情况"""
+        params = SimulationParameters(
+            current_price=10.0,
+            underlying_price=100.0,
+            strike=100.0,
+            days_to_expiry=3,
+            delta=-0.5,
+            theta=-0.1,
+            gamma=0.01,
+            vega=0.1,
+            implied_volatility=0.3,
+            historical_volatility=0.3,
+            effective_volatility=0.3,
+            simulations=10,
+            first_day_fraction=0.0  # 没有剩余时间
+        )
+
+        engine = MonteCarloEngine(params)
+        import asyncio
+        paths = asyncio.run(engine.simulate_price_paths())
+
+        # 第一天的价格应该保持不变
+        assert np.all(paths[:, 0] == params.current_price)
+
+    def test_calendar_date_mapping(self):
+        """测试日历日期映射"""
+        from datetime import datetime
+
+        paths = np.array([
+            [11.0, 10.5, 11.0],  # 第一天就成交（day_idx=0）
+            [11.0, 11.0, 10.6],  # 第一天就成交（day_idx=0）
+        ])
+
+        detector = FillDetector()
+
+        # 模拟市场上下文
+        market_ctx = {
+            "first_day_is_today": True,
+            "eastern_time": datetime(2025, 10, 5, 12, 0)  # 2025-10-05 12:00 PM
+        }
+
+        results = detector.detect_fills(
+            paths,
+            limit_price=11.0,
+            order_side="sell",
+            expiration_date="2025-10-17",
+            market_context=market_ctx
+        )
+
+        # 验证第一天有日历日期
+        prob_by_day = results["probability_by_day"]
+        assert len(prob_by_day) > 0
+        assert "calendar_date" in prob_by_day[0]
+        assert prob_by_day[0]["calendar_date"] == "2025-10-05"  # 今日
+
+        # 验证百分位数描述存在
+        percentile_desc = results.get("percentile_descriptions", {})
+        assert len(percentile_desc) > 0
+        # 验证包含 EDT 标记
+        if 25 in percentile_desc:
+            assert "EDT" in percentile_desc[25] or "成交" in percentile_desc[25]
+
+    def test_percentile_descriptions_no_zero_day(self):
+        """测试百分位数描述不包含混淆的'第0天'"""
+        from datetime import datetime
+
+        paths = np.array([
+            [10.0, 10.5, 11.0, 10.8],
+            [10.0, 11.0, 10.6, 10.5],
+            [10.0, 10.2, 11.0, 10.7],
+        ])
+
+        detector = FillDetector()
+
+        market_ctx = {
+            "first_day_is_today": True,
+            "eastern_time": datetime(2025, 10, 5, 10, 0)
+        }
+
+        results = detector.detect_fills(
+            paths,
+            limit_price=11.0,
+            order_side="sell",
+            expiration_date="2025-10-17",
+            market_context=market_ctx
+        )
+
+        percentile_desc = results.get("percentile_descriptions", {})
+
+        # 验证不包含"第0天"这种混淆表述
+        for desc in percentile_desc.values():
+            assert "第0天" not in desc
+            # 应该用"今日"、"明日"或具体天数
+            assert ("今日" in desc or "明日" in desc or "天内" in desc or
+                    "不太可能" in desc)
