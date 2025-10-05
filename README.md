@@ -334,6 +334,31 @@ uv run pytest tests/tools/test_hello_tool.py
     - 分配概率和downside保护计算
     - 机构级JP Morgan风格订单块
 
+- **option_limit_order_probability_tool_mcp**: 期权限价单成交概率预测工具 🆕
+  - 输入:
+    - `symbol` (必需: 股票代码，如 "AAPL", "TSLA", "NVDA")
+    - `strike_price` (必需: 期权执行价格)
+    - `expiration` (必需: 到期日期 YYYY-MM-DD 格式)
+    - `option_type` (必需: 期权类型 "put" 或 "call")
+    - `current_price` (必需: 当前期权市场价格)
+    - `limit_price` (必需: 目标限价)
+    - `order_side` (必需: 订单方向 "buy" 或 "sell")
+    - `analysis_window` (可选: 分析窗口天数)
+  - 返回:
+    - 成交概率 (0-100%)
+    - 预期成交时间 (天数)
+    - 置信度指标和统计验证
+    - 每日成交概率分布
+    - 替代限价建议
+    - 完整的风险分析
+  - 特色:
+    - 蒙特卡洛模拟 (10,000+ paths)
+    - 动态波动率混合 (IV + HV)
+    - Greeks敏感度分析
+    - 理论和实证双重验证
+    - 智能替代限价推荐
+    - 统计置信度评估
+
 - **hello**: 简单的问候工具（演示用）
   - 输入: `name` (字符串)
   - 返回: 结构化的问候响应
@@ -426,7 +451,18 @@ uv run pytest tests/tools/test_hello_tool.py
 使用 covered_call_strategy_tool_mcp 分析 TSLA 的减仓策略 (shares_owned=200, purpose_type="exit", duration="1m", avg_cost=220.0)
 使用 covered_call_strategy_tool_mcp 获取 NVDA 大仓位策略建议 (shares_owned=1000, duration="2w", min_premium=3.0)
 
-# 分析多个股票  
+# 期权限价单成交概率预测 🆕
+使用 option_limit_order_probability_tool_mcp 预测 AAPL 看跌期权卖单成交概率
+  (symbol="AAPL", strike_price=145.0, expiration="2025-11-07", option_type="put",
+   current_price=2.50, limit_price=2.80, order_side="sell")
+使用 option_limit_order_probability_tool_mcp 预测 TSLA 看涨期权买单成交概率
+  (symbol="TSLA", strike_price=250.0, expiration="2025-11-21", option_type="call",
+   current_price=12.00, limit_price=10.50, order_side="buy")
+使用 option_limit_order_probability_tool_mcp 分析 NVDA 限价单策略并获得替代建议
+  (symbol="NVDA", strike_price=140.0, expiration="2025-12-19", option_type="put",
+   current_price=3.20, limit_price=3.60, order_side="sell", analysis_window=14)
+
+# 分析多个股票
 同时获取 AAPL、NVDA、MSFT 的股票数据、财报时间、历史趋势和期权策略进行综合投资分析
 
 # 综合期权策略分析 🆕  

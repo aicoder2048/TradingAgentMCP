@@ -20,6 +20,7 @@ from .tools.option_expirations_tool import (
 from .tools.portfolio_optimization_tool import portfolio_optimization_tool_mcp
 from .tools.simplified_stock_allocation_tool import simplified_stock_allocation_tool
 from .tools.optimal_expiration_selector_tool import OptimalExpirationSelectorTool
+from .tools.option_limit_order_probability_tool import option_limit_order_probability_tool
 from .prompts.hello_prompt import call_hello_multiple
 from .prompts.income_generation_csp_prompt import income_generation_csp_engine
 from .prompts.option_position_rebalancer_prompt import option_position_rebalancer_engine
@@ -692,6 +693,76 @@ def create_server() -> FastMCP:
             defensive_roll_trigger_pct=defensive_roll_trigger_pct,
             profit_target_pct=profit_target_pct,
             max_additional_capital=max_additional_capital
+        )
+
+    @mcp.tool()
+    async def option_limit_order_probability_tool_mcp(
+        symbol: str,
+        strike_price: float,
+        expiration: str,
+        option_type: str,
+        current_price: float,
+        limit_price: float,
+        order_side: str,
+        analysis_window: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Predict option limit order fill probability using Monte Carlo simulation.
+
+        Analyzes whether a limit order will be filled and estimates time to fill
+        based on volatility analysis, Greeks sensitivity, and statistical modeling.
+
+        Args:
+            symbol: Stock ticker symbol (e.g., "AAPL", "TSLA", "NVDA")
+            strike_price: Option strike price
+            expiration: Expiration date in YYYY-MM-DD format
+            option_type: Option type - "put" or "call"
+            current_price: Current option market price
+            limit_price: Target limit order price
+            order_side: Order side - "buy" or "sell"
+            analysis_window: Analysis window in days (optional, defaults to DTE)
+
+        Returns:
+            Comprehensive fill probability analysis including:
+            - Fill probability (0-100%)
+            - Expected days to fill
+            - Confidence metrics and validation
+            - Daily probability distribution
+            - Alternative limit price recommendations
+            - Statistical confidence assessment
+
+        Examples:
+            # Predict sell limit order fill
+            await option_limit_order_probability_tool_mcp(
+                symbol="AAPL",
+                strike_price=145.0,
+                expiration="2025-11-07",
+                option_type="put",
+                current_price=2.50,
+                limit_price=2.80,  # Selling above market
+                order_side="sell"
+            )
+
+            # Predict buy limit order fill
+            await option_limit_order_probability_tool_mcp(
+                symbol="TSLA",
+                strike_price=250.0,
+                expiration="2025-11-21",
+                option_type="call",
+                current_price=12.00,
+                limit_price=10.50,  # Buying below market
+                order_side="buy"
+            )
+        """
+        return await option_limit_order_probability_tool(
+            symbol=symbol,
+            strike_price=strike_price,
+            expiration=expiration,
+            option_type=option_type,
+            current_price=current_price,
+            limit_price=limit_price,
+            order_side=order_side,
+            analysis_window=analysis_window
         )
 
     return mcp
