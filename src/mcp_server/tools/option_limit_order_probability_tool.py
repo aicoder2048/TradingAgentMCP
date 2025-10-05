@@ -169,6 +169,7 @@ async def option_limit_order_probability_tool(
         # Step 3.5: 获取市场时间上下文
         eastern_time = get_timezone_time(MARKET_CONFIG["timezone"])
         market_ctx = calculate_first_day_context(eastern_time)
+        market_ctx["eastern_time"] = eastern_time  # 添加到上下文中，供日历日期映射使用
 
         print(f"📅 市场时间上下文:")
         print(format_market_context_summary(market_ctx))
