@@ -418,6 +418,285 @@ uv run pytest tests/tools/test_hello_tool.py
     - 基于市场条件的智能策略评估
     - 三级风险容忍度的差异化建议
 
+## 🔍 工具 vs 提示：核心区别与使用场景
+
+理解**工具（Tool）**和**提示（Prompt）**的区别，可以帮助你选择正确的方式完成任务。
+
+### 本质区别
+
+| 维度 | MCP Server Tool | MCP Server Prompt |
+|------|----------------|-------------------|
+| **类比** | 🔧 单个工具（锤子） | 📋 施工图纸（告诉AI怎么用工具） |
+| **输入** | 参数（symbol, duration等） | 参数 + AI上下文 |
+| **输出** | 结构化数据（JSON） | 超长Prompt字符串 |
+| **执行者** | Python代码直接执行 | AI（Claude）读取并执行 |
+| **复杂度** | 单一任务 | 多步骤工作流 |
+| **调用方式** | 任何工具/脚本 | AI助手（Claude Code） |
+| **典型用例** | 快速获取单个结果 | 完整分析和决策支持 |
+
+### CSP工具与Prompt的具体区别
+
+#### 📊 `cash_secured_put_strategy_tool_mcp` (Tool)
+
+**核心能力**：
+- ✅ 在**一个到期日**下，分析不同的执行价（Strike）
+- ✅ 自动选择最优到期日（通过内部ExpirationSelector）
+- ✅ 返回三个风险级别的推荐（conservative/balanced/aggressive）
+- ✅ 可被任何程序调用（脚本、自动化工作流等）
+
+**工作流程**：
+```
+用户输入: symbol="AAPL", purpose_type="income", duration="1w"
+    ↓
+内部ExpirationSelector筛选所有1周内的到期日
+    ↓
+选择最优的一个到期日（例如：2025-10-18）
+    ↓
+只分析这个到期日的期权链
+    ↓
+返回：conservative/balanced/aggressive 三个推荐
+      （都是2025-10-18到期的不同执行价）
+```
+
+**限制**：
+- ❌ 不比较多个到期日的策略
+- ❌ 不支持多股票组合分配
+- ❌ 不展示到期日筛选的详细评分过程
+- ❌ 返回结果中只有一个到期日
+
+**典型使用场景**：
+```python
+# 场景：自动化脚本，每天分析AAPL的周度CSP策略
+result = cash_secured_put_strategy_tool_mcp(
+    symbol="AAPL",
+    purpose_type="income",
+    duration="1w",
+    capital_limit=50000
+)
+
+# 提取推荐
+conservative = result["recommendations"]["conservative"]
+print(f"执行价: ${conservative['option_details']['strike']}")
+print(f"到期日: {result['selected_expiration']['date']}")  # 只有一个
+print(f"年化收益: {conservative['pnl_analysis']['annualized_return']}%")
+```
+
+---
+
+#### 📋 `income_generation_csp_engine` 和 `stock_acquisition_csp_engine` (Prompts)
+
+**核心能力**：
+- ✅ 完整的AI工作流编排（7-8个步骤）
+- ✅ 先调用`optimal_expiration_selector_tool_mcp`智能筛选到期日（返回评分详情）
+- ✅ 支持多个股票的投资组合分配
+- ✅ 包含市场分析、基本面分析、技术面分析
+- ✅ 生成完整的HTML报告和执行建议
+
+**工作流程**：
+```
+用户输入: tickers=["AAPL","MSFT"], cash_usd=50000, target_apy_pct=50
+    ↓
+第1步: 验证市场时间 (get_market_time_tool)
+    ↓
+第2步: 分析AAPL和MSFT的基本面、技术面 (stock_info_tool, stock_history_tool)
+    ↓
+第3步: 智能到期日优化选择 (optimal_expiration_selector_tool_mcp)
+         - 获取所有候选到期日
+         - 展示评分详情（Theta效率、Gamma风险、流动性）
+         - 选择最优到期日
+    ↓
+第4步: 对每个股票调用CSP Tool (cash_secured_put_strategy_tool_mcp)
+         - AAPL使用优化选择的到期日
+         - MSFT使用优化选择的到期日
+    ↓
+第5步: 期权链深度分析 (options_chain_tool_mcp)
+    ↓
+第6步: 被行权概率计算 (option_assignment_probability_tool_mcp)
+    ↓
+第7步: 投资组合优化 (portfolio_optimization_tool_mcp)
+         - 基于夏普比率分配权重
+         - AAPL: 60% ($30,000)
+         - MSFT: 40% ($20,000)
+    ↓
+返回：完整分析报告 + HTML文件 + 执行建议
+```
+
+**优势**：
+- ✅ 展示到期日优化的完整过程（评分、排名、选择理由）
+- ✅ 多股票智能配置（基于风险收益优化）
+- ✅ AI提供决策建议和执行指导
+- ✅ 完整的风险管理和监控计划
+
+**限制**：
+- ❌ 需要AI执行（不能在脚本中直接调用）
+- ❌ 执行时间较长（调用多个工具）
+
+**典型使用场景**：
+```
+用户在Claude Code中提问:
+"我有5万美金，想通过卖PUT获得年化50%收益，帮我分析AAPL和MSFT"
+
+Claude调用Prompt后执行:
+1. ✅ 验证市场时间
+2. ✅ 分析AAPL/MSFT基本面和技术面
+3. ✅ 智能选择最优到期日（展示评分过程）
+4. ✅ 生成两个股票的CSP策略
+5. ✅ 计算被行权概率
+6. ✅ 优化投资组合配置
+7. ✅ 生成HTML报告
+
+Claude输出:
+"根据分析，建议分配：
+- AAPL: 60% ($30,000) - 保守策略 - 年化52%
+- MSFT: 40% ($20,000) - 平衡策略 - 年化48%
+综合年化收益预期: 50.4%
+
+详细分析已保存到report.html"
+```
+
+---
+
+#### 🎯 两个CSP Prompt的区别
+
+| 维度 | income_generation_csp | stock_acquisition_csp |
+|------|---------------------|----------------------|
+| **目标** | 收取权利金，**不想**被分配股票 | 以折扣价买入，**欢迎**被分配 |
+| **Delta范围** | 0.10-0.30（保守） | 0.30-0.50（激进） |
+| **到期日偏好** | 7-21天（快速周转） | 30-60天（耐心等待） |
+| **Tool参数** | `purpose_type="income"` | `purpose_type="discount"` |
+| **评估重点** | 年化收益率、避免分配 | 分配概率、折扣幅度 |
+| **投资组合** | 多样化（降低风险） | 集中化（建仓优质股票） |
+| **关键词** | 都调用同一个Tool | 但传递不同参数和分析逻辑 |
+
+---
+
+### 使用场景决策树
+
+```
+你的需求是什么？
+    ↓
+   /  \
+  /    \
+快速    完整
+结果    分析
+ ↓      ↓
+
+直接   使用
+调用   Prompt
+Tool    ↓
+ ↓
+        AI编排
+JSON    多工具
+结果     ↓
+
+        完整
+        报告
+        +建议
+```
+
+#### 选择Tool的情况：
+- ✅ 我知道具体参数（symbol, duration等）
+- ✅ 我只要策略推荐结果（单个到期日）
+- ✅ 我会自己分析和决策
+- ✅ 我要在程序中调用（自动化）
+- ✅ 我需要快速结果
+
+#### 选择Prompt的情况：
+- ✅ 我需要完整的分析流程
+- ✅ 我需要AI帮我选股、选到期日
+- ✅ 我需要投资组合优化建议
+- ✅ 我需要风险评估和执行建议
+- ✅ 我需要人类可读的报告
+- ✅ 我想看到期日优化的评分过程
+- ✅ 我要分析多个股票并智能分配资金
+
+---
+
+### 代码示例对比
+
+#### 示例1：直接用Tool（程序化）
+
+```python
+# 快速获取AAPL的CSP推荐
+import asyncio
+
+async def quick_analysis():
+    result = await cash_secured_put_strategy_tool_mcp(
+        symbol="AAPL",
+        purpose_type="income",
+        duration="1w",
+        capital_limit=50000
+    )
+
+    # 只关注结果
+    conservative = result["recommendations"]["conservative"]
+    print(f"推荐执行价: ${conservative['option_details']['strike']}")
+    print(f"到期日: {result['selected_expiration']['date']}")  # 单一日期
+    print(f"年化收益: {conservative['pnl_analysis']['annualized_return']}%")
+
+    # 特点：快速、直接、单一到期日
+```
+
+#### 示例2：通过Prompt（AI辅助决策）
+
+```
+用户在Claude Code中提问：
+"我有5万美金，想通过CSP策略实现年化50%收益，
+ 该投资哪些股票？怎么分配？"
+
+选择Prompt：income_generation_csp_engine
+
+Claude执行完整流程：
+1. ✅ 市场时间验证
+2. ✅ 多股票基本面分析
+3. ✅ 智能到期日优化（展示评分排名）
+4. ✅ 对每个股票生成CSP策略
+5. ✅ 被行权概率计算
+6. ✅ 投资组合配置（基于夏普比率）
+7. ✅ 生成HTML报告
+
+Claude输出：
+"根据分析，建议分配：
+- AAPL: 60% - 年化52%
+- MSFT: 40% - 年化48%
+
+到期日优化详情：
+- 2025-10-18评分85分（选中）
+  - Theta效率：92分
+  - 流动性：88分
+  - Gamma风险：78分
+- 2025-10-25评分78分
+  - Theta效率：85分
+  ...
+
+详细报告已保存"
+```
+
+---
+
+### 关键要点总结
+
+1. **Tool是单个函数** - 做一件具体的事
+   - CSP Tool = 给定到期日范围 → 选择最优一个 → 分析 → 返回推荐
+
+2. **Prompt是AI工作流编排器** - 组合多个Tool完成复杂任务
+   - CSP Prompts = 市场分析 + 选股 + 到期日优化 + 策略生成 + 组合配置
+
+3. **到期日处理的区别**：
+   - Tool：内部选择**一个**最优到期日，不展示过程
+   - Prompt：先调用`optimal_expiration_selector`展示**所有候选**的评分排名，再用最优的调用Tool
+
+4. **多股票支持的区别**：
+   - Tool：每次只分析一个股票
+   - Prompt：分析多个股票 + 智能分配投资组合权重
+
+5. **两层设计的好处**：
+   - Tool可以被任何地方复用（脚本、自动化、其他Prompt）
+   - Prompt可以灵活编排业务逻辑
+   - 关注点分离，易于维护
+
+---
+
 ## 🎯 与 Claude Code 配合使用
 
 1. **启动服务器**: 服务器将根据 `.mcp.json` 中的配置运行
