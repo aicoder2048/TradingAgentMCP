@@ -341,6 +341,7 @@ async def option_limit_order_probability_tool(
                 "explanation": market_ctx["explanation"],
                 "remaining_hours": market_ctx.get("remaining_hours"),
                 "total_trading_hours": market_ctx.get("total_trading_hours"),
+                "trading_hours_display": market_ctx.get("trading_hours_display"),
                 "current_iv_percentile": None,
                 "recent_volatility_trend": "elevated" if vol_result.get("iv_hv_ratio", 1.0) > 1.2 else "normal"
             },

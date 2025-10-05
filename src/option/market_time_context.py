@@ -76,7 +76,12 @@ def calculate_first_day_context(eastern_time: datetime) -> Dict[str, Any]:
             "market_session": market_status,
             "explanation": "第一交易日是下一交易日（完整交易日）",
             "remaining_hours": total_hours,
-            "total_trading_hours": total_hours
+            "total_trading_hours": total_hours,
+            "trading_hours_display": {
+                "label": "下一交易日可用时间",
+                "value": total_hours,
+                "full_text": f"下一交易日可用时间: {total_hours}小时"
+            }
         }
 
     current_time = eastern_time.time()
@@ -89,7 +94,12 @@ def calculate_first_day_context(eastern_time: datetime) -> Dict[str, Any]:
             "market_session": "pre-market",
             "explanation": "第一交易日是今天（完整交易日，盘前）",
             "remaining_hours": total_hours,
-            "total_trading_hours": total_hours
+            "total_trading_hours": total_hours,
+            "trading_hours_display": {
+                "label": "今日完整交易时间",
+                "value": total_hours,
+                "full_text": f"今日完整交易时间: {total_hours}小时"
+            }
         }
 
     # 情况 3: 盘中 → 今天是第一交易日，计算剩余时间
@@ -114,7 +124,12 @@ def calculate_first_day_context(eastern_time: datetime) -> Dict[str, Any]:
             "market_session": "market",
             "explanation": f"第一交易日是今天（剩余 {fraction*100:.0f}% 交易时间，约 {remaining_hours:.1f} 小时）",
             "remaining_hours": max(0.0, remaining_hours),
-            "total_trading_hours": total_hours
+            "total_trading_hours": total_hours,
+            "trading_hours_display": {
+                "label": "今日剩余交易时间",
+                "value": max(0.0, remaining_hours),
+                "full_text": f"今日剩余交易时间: {max(0.0, remaining_hours):.1f}小时"
+            }
         }
 
     # 情况 4: 盘后 → 今天已结束，第一交易日是下一个交易日
@@ -125,7 +140,12 @@ def calculate_first_day_context(eastern_time: datetime) -> Dict[str, Any]:
             "market_session": "after-hours",
             "explanation": "第一交易日是下一交易日（完整交易日，盘后）",
             "remaining_hours": total_hours,
-            "total_trading_hours": total_hours
+            "total_trading_hours": total_hours,
+            "trading_hours_display": {
+                "label": "下一交易日可用时间",
+                "value": total_hours,
+                "full_text": f"下一交易日可用时间: {total_hours}小时"
+            }
         }
 
 
